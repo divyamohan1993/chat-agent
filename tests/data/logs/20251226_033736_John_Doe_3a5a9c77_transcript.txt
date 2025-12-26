@@ -1,0 +1,26 @@
+Session ID: 3a5a9c77-16db-4445-8057-7e117cf435e8
+Lead: John Doe (9876543210)
+Mode: chat
+Started: 2025-12-25 22:07:36.413483
+Ended: 2025-12-25 22:07:36.415057
+==================================================
+
+[Agent]: Hello â€” this is RealtyAssistant calling about the enquiry you submitted. Am I speaking with John Doe?
+[User]: Yes, this is John speaking.
+[Agent]: Great, John Doe! Thank you for confirming.
+[Agent]: Which location are you searching in?
+[User]: Mumbai, Andheri West
+[Agent]: Got it, Mumbai, Andheri West is a wonderful area. Let me note that down.
+[Agent]: Are you looking for a Residential or Commercial property?
+[User]: Residential
+[Agent]: Residential property it is!
+[Agent]: Which BHK configuration would you prefer: 1 BHK, 2 BHK, 3 BHK, or 4 BHK?
+[User]: 2 BHK
+[Agent]: Perfect, 2 BHK noted.
+[Agent]: What is your budget for this property?
+[User]: 50 to 60 lakhs
+[Agent]: Thank you, I've noted your budget as 50 to 60 lakhs.
+[Agent]: Would you like a sales representative to call you to discuss your requirements further? (Yes/No)
+[User]: Yes
+[Agent]: Wonderful! A representative will reach out to you soon.
+[Agent]: Thanks John Doe â€” based on your inputs, we found 5 matching properties. We'll have a representative call you shortly to discuss the best options. Have a great day!
