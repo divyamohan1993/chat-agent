@@ -80,14 +80,8 @@ class PropertySearcher:
                     '--disable-gpu'
                 ]
             )
-            self._context = await self._browser.new_context(
-                viewport={'width': 1280, 'height': 720},
-                user_agent=(
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                    'AppleWebKit/537.36 (KHTML, like Gecko) '
-                    'Chrome/120.0.0.0 Safari/537.36'
-                )
-            )
+            # Context is now created per-request
+            # self._context = await self._browser.new_context(...)
             
             self._initialized = True
             logger.info("Playwright browser initialized")
@@ -139,32 +133,47 @@ class PropertySearcher:
             
             logger.info(f"Searching: {search_url}")
             
-            # Perform search
-            page = await self._context.new_page()
+            # Create new context for this search (auto-create session)
+            context = await self._browser.new_context(
+                viewport={'width': 1280, 'height': 720},
+                user_agent=(
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/120.0.0.0 Safari/537.36'
+                )
+            )
             
             try:
-                await page.goto(search_url, timeout=self.SEARCH_TIMEOUT)
-                await page.wait_for_load_state("networkidle", timeout=self.SEARCH_TIMEOUT)
+                # Perform search
+                page = await context.new_page()
                 
-                # Extract property count and listings
-                count, properties = await self._extract_results(page)
-                
-                return PropertySearchResult(
-                    count=count,
-                    properties=properties,
-                    query_params={
-                        "location": location,
-                        "property_type": property_type,
-                        "topology": topology,
-                        "budget_min": budget_min,
-                        "budget_max": budget_max
-                    },
-                    success=True,
-                    source_url=search_url
-                )
-                
+                try:
+                    await page.goto(search_url, timeout=self.SEARCH_TIMEOUT)
+                    await page.wait_for_load_state("networkidle", timeout=self.SEARCH_TIMEOUT)
+                    
+                    # Extract property count and listings
+                    count, properties = await self._extract_results(page)
+                    
+                    return PropertySearchResult(
+                        count=count,
+                        properties=properties,
+                        query_params={
+                            "location": location,
+                            "property_type": property_type,
+                            "topology": topology,
+                            "budget_min": budget_min,
+                            "budget_max": budget_max
+                        },
+                        success=True,
+                        source_url=search_url
+                    )
+                    
+                finally:
+                    await page.close()
+            
             finally:
-                await page.close()
+                # Close context (session)
+                await context.close()
                 
         except Exception as e:
             logger.error(f"Search error: {e}")
@@ -412,8 +421,8 @@ class PropertySearcher:
     async def close(self):
         """Close the browser and cleanup resources."""
         try:
-            if self._context:
-                await self._context.close()
+            # if self._context:
+            #     await self._context.close()
             if self._browser:
                 await self._browser.close()
             if self._playwright:
