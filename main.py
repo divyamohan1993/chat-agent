@@ -34,7 +34,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from models import (
     LeadInput, APILeadRequest, APIResponse,
-    QualificationSummary, QualificationStatus
+    QualificationSummary, QualificationStatus,
+    CollectedData, QualificationReason
 )
 from agent import QualificationAgent
 from core import LLMEngine, PropertySearcher, WhisperEngine, GeminiFallback
