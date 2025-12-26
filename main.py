@@ -283,7 +283,9 @@ async def search_properties(
     property_type: str = Query("residential", description="residential or commercial"),
     topology: Optional[str] = Query(None, description="BHK or subtype"),
     budget_min: Optional[int] = Query(None, description="Min budget in INR"),
-    budget_max: Optional[int] = Query(None, description="Max budget in INR")
+    budget_max: Optional[int] = Query(None, description="Max budget in INR"),
+    project_status: Optional[str] = Query(None, description="Launching soon, New Launch, Under Construction, Ready to move in"),
+    possession: Optional[str] = Query(None, description="3 Months, 6 Months, 1 year, 2+ years, Ready To Move")
 ):
     """
     Search for properties on realtyassistant.in.
@@ -301,7 +303,9 @@ async def search_properties(
             property_type=property_type,
             topology=topology,
             budget_min=budget_min,
-            budget_max=budget_max
+            budget_max=budget_max,
+            project_status=project_status,
+            possession=possession
         )
         
         return {
@@ -318,47 +322,89 @@ async def search_properties(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# Import database
+from core.database import get_database, Lead as DbLead
+from pydantic import BaseModel
+
+
+class LeadCreateRequest(BaseModel):
+    """Request model for creating a lead."""
+    session_id: str
+    timestamp: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    consent: bool = False
+    location: Optional[str] = None
+    property_category: Optional[str] = None
+    property_type: Optional[str] = None
+    bedroom: Optional[str] = None
+    project_status: Optional[str] = None
+    possession: Optional[str] = None
+    budget: Optional[str] = None
+    properties_found: int = 0
+    search_url: Optional[str] = None
+    qualified: bool = False
+
+
+@app.post("/api/leads", status_code=201)
+async def create_lead(lead_data: LeadCreateRequest):
+    """Create or update a lead in the database."""
+    try:
+        db = get_database()
+        lead = db.create_lead(lead_data.model_dump())
+        return {
+            "success": True,
+            "message": "Lead saved successfully",
+            "lead_id": lead.id if hasattr(lead, 'id') else None,
+            "session_id": lead_data.session_id
+        }
+    except Exception as e:
+        logger.error(f"Error saving lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/leads")
-async def get_leads():
-    """Get all saved lead qualification summaries."""
-    leads_dir = Path(os.getenv("LEADS_DIR", "data/leads"))
-    
-    if not leads_dir.exists():
-        return {"leads": []}
-    
-    leads = []
-    for file_path in sorted(leads_dir.glob("*_summary.json"), reverse=True):
-        try:
-            import json
-            with open(file_path) as f:
-                data = json.load(f)
-                leads.append({
-                    "filename": file_path.name,
-                    "session_id": data.get("session_id"),
-                    "lead_name": data.get("lead", {}).get("name"),
-                    "status": data.get("status"),
-                    "timestamp": data.get("timestamp")
-                })
-        except Exception as e:
-            logger.error(f"Error reading {file_path}: {e}")
-    
-    return {"leads": leads, "total": len(leads)}
+async def get_leads(
+    qualified_only: bool = Query(False, description="Only return qualified leads"),
+    limit: int = Query(100, description="Max leads to return"),
+    offset: int = Query(0, description="Offset for pagination")
+):
+    """Get all leads from the database."""
+    try:
+        db = get_database()
+        leads = db.get_all_leads(qualified_only=qualified_only, limit=limit, offset=offset)
+        total = db.get_leads_count(qualified_only=qualified_only)
+        
+        return {
+            "leads": leads,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        logger.error(f"Error getting leads: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/leads/{session_id}")
 async def get_lead_details(session_id: str):
-    """Get detailed lead summary by session ID."""
-    leads_dir = Path(os.getenv("LEADS_DIR", "data/leads"))
-    
-    for file_path in leads_dir.glob(f"*{session_id}*_summary.json"):
-        try:
-            import json
-            with open(file_path) as f:
-                return json.load(f)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-    
-    raise HTTPException(status_code=404, detail="Lead not found")
+    """Get lead details by session ID."""
+    try:
+        db = get_database()
+        lead = db.get_lead(session_id)
+        
+        if lead:
+            return lead.to_dict()
+        
+        raise HTTPException(status_code=404, detail="Lead not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/api/transcripts/{session_id}")

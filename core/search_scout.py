@@ -100,7 +100,9 @@ class PropertySearcher:
         property_type: str,
         topology: Optional[str] = None,
         budget_min: Optional[int] = None,
-        budget_max: Optional[int] = None
+        budget_max: Optional[int] = None,
+        project_status: Optional[str] = None,
+        possession: Optional[str] = None
     ) -> PropertySearchResult:
         """
         Search for properties on realtyassistant.in.
@@ -111,6 +113,8 @@ class PropertySearcher:
             topology: BHK type or commercial subtype
             budget_min: Minimum budget in INR
             budget_max: Maximum budget in INR
+            project_status: Launching soon, New Launch, Under Construction, Ready to move in
+            possession: 3 Months, 6 Months, 1 year, 2+ years, Ready To Move
             
         Returns:
             PropertySearchResult with matching properties
@@ -128,7 +132,8 @@ class PropertySearcher:
         try:
             # Build search URL
             search_url = self._build_search_url(
-                location, property_type, topology, budget_min, budget_max
+                location, property_type, topology, budget_min, budget_max,
+                project_status, possession
             )
             
             logger.info(f"Searching: {search_url}")
@@ -162,7 +167,9 @@ class PropertySearcher:
                             "property_type": property_type,
                             "topology": topology,
                             "budget_min": budget_min,
-                            "budget_max": budget_max
+                            "budget_max": budget_max,
+                            "project_status": project_status,
+                            "possession": possession
                         },
                         success=True,
                         source_url=search_url
@@ -185,7 +192,9 @@ class PropertySearcher:
                     "property_type": property_type,
                     "topology": topology,
                     "budget_min": budget_min,
-                    "budget_max": budget_max
+                    "budget_max": budget_max,
+                    "project_status": project_status,
+                    "possession": possession
                 },
                 success=False,
                 error=str(e)
@@ -232,7 +241,9 @@ class PropertySearcher:
         property_type: str,
         topology: Optional[str],
         budget_min: Optional[int],
-        budget_max: Optional[int]
+        budget_max: Optional[int],
+        project_status: Optional[str] = None,
+        possession: Optional[str] = None
     ) -> str:
         """
         Build the search URL for realtyassistant.in/properties.
@@ -294,11 +305,22 @@ class PropertySearcher:
             elif 'studio' in topology_lower:
                 params['bedroom'] = 'Studio'
         
+        # Project Status - exact values from form
+        if project_status:
+            # Exact values: Launching soon, New Launch, Under Construction, Ready to move in
+            params['project_status'] = project_status
+        
+        # Possession within - exact values from form
+        if possession:
+            # Exact values: 3 Months, 6 Months, 1 year, 2+ years, Ready To Move
+            params['possession'] = possession
+        
         params['submit'] = 'Search'
         
         # Build URL
         query_string = urlencode(params)
         return f"{base_path}?{query_string}"
+
 
     
     async def _extract_results(self, page) -> tuple:
@@ -440,7 +462,9 @@ class PropertySearcher:
         property_type: str,
         topology: Optional[str] = None,
         budget_min: Optional[int] = None,
-        budget_max: Optional[int] = None
+        budget_max: Optional[int] = None,
+        project_status: Optional[str] = None,
+        possession: Optional[str] = None
     ) -> PropertySearchResult:
         """
         Synchronous version of search.
@@ -451,6 +475,8 @@ class PropertySearcher:
             topology: BHK/subtype
             budget_min: Min budget
             budget_max: Max budget
+            project_status: Launching soon, New Launch, Under Construction, Ready to move in
+            possession: 3 Months, 6 Months, 1 year, 2+ years, Ready To Move
             
         Returns:
             PropertySearchResult
@@ -462,8 +488,10 @@ class PropertySearcher:
             asyncio.set_event_loop(loop)
         
         return loop.run_until_complete(
-            self.search(location, property_type, topology, budget_min, budget_max)
+            self.search(location, property_type, topology, budget_min, budget_max,
+                       project_status, possession)
         )
+
     
     @staticmethod
     def parse_budget(budget_str: str) -> tuple:

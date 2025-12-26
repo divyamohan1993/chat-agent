@@ -43,21 +43,15 @@
     };
 
     // Conversation stages matching realtyassistant.in form EXACTLY
-    // FLOW: Name -> Consent -> Location -> Property Category -> Property Type -> Bedroom -> Contact
+    // NEW FLOW: Name -> Search Fields -> Show Results -> Ask Consent -> If Yes: Budget/Phone/Email -> Complete
     const CONVERSATION_FLOW = {
         greeting: {
             question: null, // Initial greeting is in config
             field: 'name',
-            next: 'consent_first'
-        },
-        consent_first: {
-            question: "Before we dive in, {name} - would you like our property experts to help you find the perfect home? 🏡 They can give you personalized recommendations based on your needs!",
-            field: 'consent',
-            options: ['Yes, get me help!', 'Just browsing for now'],
             next: 'location'
         },
         location: {
-            question: "Awesome! 🎉 Which city are you looking in?",
+            question: "Nice to meet you, {name}! 🎉 Which city are you looking for property in?",
             field: 'location',
             // All 16 cities from the form - EXACT ORDER
             options: [
@@ -85,20 +79,58 @@
             field: 'bedroom',
             // Exact match to form
             options: ['1 BHK', '2 BHK', '3 BHK', '4 BHK', '5 BHK', 'Studio'],
+            next: 'project_status'
+        },
+        project_status: {
+            question: "What's your preferred project status? 🏗️",
+            field: 'project_status',
+            // Exact match to form
+            options: ['Launching soon', 'New Launch', 'Under Construction', 'Ready to move in'],
+            next: 'possession'
+        },
+        possession: {
+            question: "When do you need possession? ⏰",
+            field: 'possession',
+            // Exact match to form
+            options: ['3 Months', '6 Months', '1 year', '2+ years', 'Ready To Move'],
+            next: 'search_and_show' // Trigger search after possession
+        },
+        // After search, ask if user wants to be contacted
+        search_and_show: {
+            question: null, // Search results shown programmatically
+            field: null,
+            next: 'consent_after_search'
+        },
+        consent_after_search: {
+            question: "Would you like our property experts to call you with more relevant information and personalized recommendations? 📞",
+            field: 'consent',
+            options: ['Yes, call me!', 'No, thanks'],
+            next: null // Dynamic - handled in code
+        },
+        // Only if user consents
+        budget: {
+            question: "Great! 💰 What's your budget range? (e.g., 50 lakhs, 1-2 crore, etc.)",
+            field: 'budget',
             next: 'phone'
         },
         phone: {
-            question: "Perfect! Now let me grab your contact details so we can send you the best matches. 📱\n\nWhat's your phone number?",
+            question: "Perfect! 📱 What's your phone number?",
             field: 'phone',
             next: 'email'
         },
         email: {
-            question: "And your email? We'll send you property alerts and the summary of our chat! 📧",
+            question: "And your email? We'll send you property alerts! 📧",
             field: 'email',
             next: 'complete'
         },
         complete: {
             question: null,
+            field: null,
+            next: null
+        },
+        // If user declines
+        thank_you: {
+            question: null, // Handled in code
             field: null,
             next: null
         }
@@ -525,7 +557,7 @@
             border: none;
             background: transparent;
             font-size: 1rem;
-            padding: 14px 0 !important;
+            padding: 10px 10px !important;
             outline: none;
             color: #1e293b;
             font-weight: 400;
@@ -1114,6 +1146,52 @@
             extracted.bedroom = 'Studio';
         }
 
+        // === PROJECT STATUS MATCHING ===
+        // Match exact form options: Launching soon, New Launch, Under Construction, Ready to move in
+        const projectStatusOptions = [
+            { keywords: ['launching soon', 'launching', 'upcoming'], value: 'Launching soon' },
+            { keywords: ['new launch', 'newly launched', 'just launched'], value: 'New Launch' },
+            { keywords: ['under construction', 'construction', 'building'], value: 'Under Construction' },
+            { keywords: ['ready to move', 'ready', 'move in', 'immediate', 'completed'], value: 'Ready to move in' }
+        ];
+        for (const status of projectStatusOptions) {
+            if (status.keywords.some(kw => lowerText.includes(kw))) {
+                extracted.project_status = status.value;
+                break;
+            }
+        }
+
+        // === POSSESSION MATCHING ===
+        // Match exact form options: 3 Months, 6 Months, 1 year, 2+ years, Ready To Move
+        const possessionOptions = [
+            { keywords: ['3 month', 'three month', '3month'], value: '3 Months' },
+            { keywords: ['6 month', 'six month', '6month', 'half year'], value: '6 Months' },
+            { keywords: ['1 year', 'one year', '1year', '12 month'], value: '1 year' },
+            { keywords: ['2 year', '2+ year', 'two year', '2year', 'more than 2', 'after 2'], value: '2+ years' },
+            { keywords: ['ready to move', 'ready', 'immediate', 'now', 'asap'], value: 'Ready To Move' }
+        ];
+        for (const poss of possessionOptions) {
+            if (poss.keywords.some(kw => lowerText.includes(kw))) {
+                extracted.possession = poss.value;
+                break;
+            }
+        }
+
+        // === BUDGET MATCHING ===
+        // Parse budget strings like "50 lakhs", "1-2 crore", "75L", "1.5Cr", "50-75 lakhs"
+        const budgetPatterns = [
+            /(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(lakh|lac|l|crore|cr)/i,  // Range: 50-75 lakhs
+            /(\d+(?:\.\d+)?)\s*(lakh|lac|l|crore|cr)/i,  // Single: 50 lakhs
+            /(?:budget|range|price)?\s*(?:is|:)?\s*(\d+(?:\.\d+)?)\s*(lakh|lac|l|crore|cr)/i  // "Budget is 50 lakhs"
+        ];
+        for (const pattern of budgetPatterns) {
+            const budgetMatch = lowerText.match(pattern);
+            if (budgetMatch) {
+                extracted.budget = text.match(pattern)[0].trim();
+                break;
+            }
+        }
+
         // === PHONE NUMBER MATCHING ===
         const phoneMatch = text.match(/(?:\+91|91|0)?[6789]\d{9}/);
         if (phoneMatch) {
@@ -1132,6 +1210,7 @@
 
         return extracted;
     }
+
 
     // Process user input based on current stage with smart parsing
     function processUserInput(text) {
@@ -1154,16 +1233,19 @@
             }
         });
 
-        // Determine next stage - skip stages where we already have data
+        // Determine next stage
         let nextStage = currentStage.next;
 
-        // Handle check_contact stage - show results first, then ask for contact
-        if (nextStage === 'check_contact') {
-            nextStage = 'phone';
+        // Handle consent_after_search - route based on user's answer
+        if (state.currentStage === 'consent_after_search') {
+            const userSaidYes = text.toLowerCase().includes('yes') || text.toLowerCase().includes('call');
+            state.collectedData.consent = userSaidYes;
+            nextStage = userSaidYes ? 'budget' : 'thank_you';
         }
 
-        // Skip stages where we already have the data
-        while (nextStage && CONVERSATION_FLOW[nextStage]) {
+        // Skip stages where we already have the data (except special stages)
+        const specialStages = ['search_and_show', 'consent_after_search', 'complete', 'thank_you'];
+        while (nextStage && CONVERSATION_FLOW[nextStage] && !specialStages.includes(nextStage)) {
             const nextStageData = CONVERSATION_FLOW[nextStage];
             if (nextStageData.field && state.collectedData[nextStageData.field]) {
                 nextStage = nextStageData.next;
@@ -1180,25 +1262,40 @@
         setTimeout(() => {
             hideTyping();
 
+            // Handle search_and_show - trigger property search
+            if (state.currentStage === 'search_and_show') {
+                triggerPropertySearch();
+                return;
+            }
+
+            // Handle thank_you - user declined contact
+            if (state.currentStage === 'thank_you') {
+                addBotMessage(`Thank you for your interest, ${state.collectedData.name || 'there'}! 🙏\n\nFeel free to come back anytime you need help finding a property. Have a great day! 🏠`);
+                // Save minimal lead info (no contact details)
+                saveLeadToDatabase(false);
+                return;
+            }
+
+            // Handle complete - user provided all info
+            if (state.currentStage === 'complete') {
+                submitQualification();
+                return;
+            }
+
             // Check if we extracted a lot of data - acknowledge it
             const extractedKeys = Object.keys(extracted);
-            if (extractedKeys.length >= 2 && state.currentStage !== 'complete') {
+            if (extractedKeys.length >= 2) {
                 const acknowledgment = generateSmartAcknowledgment(extracted);
                 addBotMessage(acknowledgment);
                 setTimeout(() => {
-                    if (state.currentStage === 'complete') {
-                        submitQualification();
-                    } else {
-                        askNextQuestion();
-                    }
+                    askNextQuestion();
                 }, 600);
-            } else if (state.currentStage === 'complete') {
-                submitQualification();
             } else {
                 askNextQuestion();
             }
         }, 800 + Math.random() * 400);
     }
+
 
     // Generate smart acknowledgment when user provides multiple pieces of info
     function generateSmartAcknowledgment(extracted) {
@@ -1262,11 +1359,10 @@
         addBotMessage(question, options);
     }
 
-    // Submit qualification - try API first, fallback to local
-    async function submitQualification() {
+    // Trigger property search and show results (called after possession is collected)
+    async function triggerPropertySearch() {
         showTyping();
 
-        const consent = state.collectedData.consent?.toLowerCase().includes('yes');
         let propertyCount = 0;
         let apiSuccess = false;
         let properties = [];
@@ -1277,84 +1373,95 @@
             const category = state.collectedData.property_category?.toLowerCase() || '';
             const propertyType = category.includes('commercial') ? 'commercial' : 'residential';
 
-            // Get the specific property_type from the form
-            const propertySubtype = state.collectedData.property_type || '';
-
-            // Get bedroom
-            const bedroom = state.collectedData.bedroom || '';
-
+            // Build search params with ALL form fields
             const searchParams = new URLSearchParams({
                 location: state.collectedData.location || '',
                 property_type: propertyType,
-                topology: bedroom // bedroom maps to topology in API
+                topology: state.collectedData.bedroom || ''
             });
+
+            // Add optional parameters if they exist
+            if (state.collectedData.project_status) {
+                searchParams.set('project_status', state.collectedData.project_status);
+            }
+            if (state.collectedData.possession) {
+                searchParams.set('possession', state.collectedData.possession);
+            }
 
             const response = await fetch(`${state.config.apiUrl}/api/search?${searchParams}`, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(30000) // 30 second timeout for Playwright search
+                signal: AbortSignal.timeout(30000)
             });
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.success && data.count > 0) {
-                    propertyCount = data.count;
+                if (data.success) {
+                    propertyCount = data.count || 0;
                     properties = data.properties || [];
                     apiSuccess = true;
+                    // Store for later use
+                    state.searchResults = { count: propertyCount, properties, success: true };
                     console.log(`API returned ${propertyCount} properties from realtyassistant.in`);
                 }
             }
         } catch (error) {
-            console.log('API search failed, showing 0 results:', error.message);
+            console.log('API search failed:', error.message);
+            state.searchResults = { count: 0, properties: [], success: false };
         }
-
-        // NO FALLBACK - Only use real search results. If API failed, show 0 properties.
-        // DO NOT generate fake properties.
-
-        // Determine qualification status
-        const isQualified = propertyCount > 0 && consent;
 
         // Hide typing and show results
         setTimeout(() => {
             hideTyping();
 
-            // Show results message - ONLY based on actual search results
-            let resultMessage;
+            // Show results message
             if (propertyCount > 0) {
-                resultMessage = `🎉 Great news, ${state.collectedData.name}! I found **${propertyCount} matching properties** in ${state.collectedData.location}!`;
+                addBotMessage(`🎉 Great news, ${state.collectedData.name}! I found **${propertyCount} matching properties** in ${state.collectedData.location}!`);
             } else {
-                resultMessage = `Thank you, ${state.collectedData.name}! Unfortunately, no properties matching your exact criteria are currently available in ${state.collectedData.location}. Our team will contact you when matching properties become available.`;
+                addBotMessage(`I searched for properties matching your criteria in ${state.collectedData.location}, but couldn't find exact matches right now. Our property experts can help you find similar options!`);
             }
-            addBotMessage(resultMessage);
 
-            // Show result card
-            setTimeout(() => {
-                showInstantResultCard(propertyCount, consent, isQualified);
-            }, 400);
-
-            // Show property listings ONLY if we have REAL results from API
+            // Show property listings if we have results
             if (apiSuccess && properties.length > 0) {
                 setTimeout(() => {
-                    // Show ALL properties returned by API (not forced to 3)
-                    showApiPropertyListings(properties);
-                }, 900);
+                    showApiPropertyListings(properties.slice(0, 3)); // Top 3
+                }, 600);
             }
 
-            // Final message - based on QUALIFICATION STATUS
+            // Now ask for consent - after showing results
             setTimeout(() => {
-                if (isQualified && propertyCount > 0) {
-                    addBotMessage(`Thanks ${state.collectedData.name}! Based on your inputs, we'll have a property expert call you at **${state.collectedData.phone}** with personalized recommendations. 📧 A summary has been sent to your email!\n\nHave a great day! 🏠`);
-                } else {
-                    addBotMessage(`Thanks for your time, ${state.collectedData.name}! We'll keep you posted when matching properties become available in ${state.collectedData.location}. 📧 Check your email for a summary!\n\nHave a great day! 🏠`);
-                }
-            }, propertyCount > 0 ? 1800 : 1000);
+                state.currentStage = 'consent_after_search';
+                askNextQuestion();
+            }, properties.length > 0 ? 1200 : 800);
+
+        }, 500);
+    }
+
+    // Submit qualification - called when user completes all info (after consent)
+    async function submitQualification() {
+        showTyping();
+
+        const propertyCount = state.searchResults?.count || 0;
+        const consent = state.collectedData.consent === true;
+
+        setTimeout(() => {
+            hideTyping();
+
+            // Show final result card
+            showInstantResultCard(propertyCount, consent, consent && propertyCount > 0);
+
+            // Final message
+            setTimeout(() => {
+                addBotMessage(`Thanks ${state.collectedData.name}! 🎉\n\nWe've saved your preferences and a property expert will call you at **${state.collectedData.phone}** with personalized recommendations.\n\n📧 A summary has been sent to **${state.collectedData.email}**!\n\nHave a great day! 🏠`);
+            }, 600);
 
         }, 500);
 
-        // Submit lead to API and send email in background (non-blocking)
-        tryApiSubmitInBackground();
+        // Save lead to database (with full contact info)
+        saveLeadToDatabase(true);
         sendEmailSummary();
     }
+
 
     // REMOVED: showDynamicSuggestions - was generating fake suggestions
     // Now we only show real data from the API
@@ -1386,48 +1493,59 @@
         }
     }
 
-    // Background API submission (non-blocking)
-    async function tryApiSubmitInBackground() {
+    // Save lead to database via API
+    async function saveLeadToDatabase(hasContact = false) {
         const leadData = {
-            lead: {
-                name: state.collectedData.name || 'Website Visitor',
-                phone: state.collectedData.phone || '',
-                email: state.collectedData.email || ''
-            },
-            collected_data: state.collectedData,
-            mode: 'chat',
-            simulate: true
+            session_id: state.sessionId,
+            timestamp: new Date().toISOString(),
+            name: state.collectedData.name || 'Website Visitor',
+            phone: hasContact ? (state.collectedData.phone || null) : null,
+            email: hasContact ? (state.collectedData.email || null) : null,
+            consent: state.collectedData.consent === true,
+
+            // Search preferences
+            location: state.collectedData.location || null,
+            property_category: state.collectedData.property_category || null,
+            property_type: state.collectedData.property_type || null,
+            bedroom: state.collectedData.bedroom || null,
+            project_status: state.collectedData.project_status || null,
+            possession: state.collectedData.possession || null,
+            budget: hasContact ? (state.collectedData.budget || null) : null,
+
+            // Search results
+            properties_found: state.searchResults?.count || 0,
+            search_url: buildRealtyAssistantUrl(),
+
+            // Qualification
+            qualified: hasContact && state.collectedData.consent === true && (state.searchResults?.count || 0) > 0
         };
 
         try {
-            await fetch(`${state.config.apiUrl}/api/qualify`, {
+            const response = await fetch(`${state.config.apiUrl}/api/leads`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(leadData)
             });
-            console.log('Lead submitted to API successfully - stored in: data/leads/');
+
+            if (response.ok) {
+                console.log('Lead saved to database successfully');
+            } else {
+                throw new Error('API returned error');
+            }
         } catch (error) {
-            console.log('API unavailable, saving lead to localStorage');
-            // Save to localStorage as fallback
-            saveLeadLocally(leadData);
+            console.log('Database save failed, saving to localStorage:', error.message);
+            // Fallback to localStorage
+            try {
+                const leads = JSON.parse(localStorage.getItem('realtyAssistantLeads') || '[]');
+                leads.push(leadData);
+                localStorage.setItem('realtyAssistantLeads', JSON.stringify(leads));
+                console.log(`Lead saved locally. Total: ${leads.length}`);
+            } catch (e) {
+                console.error('Failed to save lead:', e);
+            }
         }
     }
 
-    // Save lead to localStorage when API is unavailable
-    function saveLeadLocally(leadData) {
-        try {
-            const leads = JSON.parse(localStorage.getItem('realtyAssistantLeads') || '[]');
-            leads.push({
-                ...leadData,
-                timestamp: new Date().toISOString(),
-                sessionId: state.sessionId
-            });
-            localStorage.setItem('realtyAssistantLeads', JSON.stringify(leads));
-            console.log(`Lead saved locally. Total leads in localStorage: ${leads.length}`);
-        } catch (e) {
-            console.error('Failed to save lead locally:', e);
-        }
-    }
 
     // Show instant result card with qualification status
     function showInstantResultCard(propertyCount, hasConsent, isQualified = null) {
@@ -1465,8 +1583,20 @@
                     <span class="realty-result-value">${state.collectedData.location || 'Not specified'}</span>
                 </div>
                 <div class="realty-result-item">
-                    <span class="realty-result-label">Requirements</span>
+                    <span class="realty-result-label">Property Type</span>
                     <span class="realty-result-value">${state.collectedData.bedroom || ''} ${state.collectedData.property_type || ''}</span>
+                </div>
+                <div class="realty-result-item">
+                    <span class="realty-result-label">Project Status</span>
+                    <span class="realty-result-value">${state.collectedData.project_status || 'Any'}</span>
+                </div>
+                <div class="realty-result-item">
+                    <span class="realty-result-label">Possession</span>
+                    <span class="realty-result-value">${state.collectedData.possession || 'Flexible'}</span>
+                </div>
+                <div class="realty-result-item">
+                    <span class="realty-result-label">Budget</span>
+                    <span class="realty-result-value">${state.collectedData.budget || 'Not specified'}</span>
                 </div>
                 <div class="realty-result-item">
                     <span class="realty-result-label">Properties Found</span>
@@ -1485,6 +1615,7 @@
         messagesContainer.appendChild(cardDiv);
         scrollToBottom();
     }
+
 
     // REMOVED: generateSampleProperties - was generating fake/hallucinated property data
     // Now we only show real data from the API search
@@ -1588,11 +1719,22 @@
             }
         }
 
+        // Project Status - exact value from form
+        if (state.collectedData.project_status) {
+            params.set('project_status', state.collectedData.project_status);
+        }
+
+        // Possession - exact value from form
+        if (state.collectedData.possession) {
+            params.set('possession', state.collectedData.possession);
+        }
+
         params.set('submit', 'Search');
 
         const queryString = params.toString();
         return queryString ? `${baseUrl}?${queryString}` : baseUrl;
     }
+
 
     // REMOVED: showPropertyListings - was used to display fake/generated properties
     // Now we only use showApiPropertyListings for real API data

@@ -53,7 +53,7 @@ class LLMEngine:
     def __init__(
         self,
         ollama_base_url: str = "http://localhost:11434",
-        ollama_model: str = "llama3.1:8b",
+        ollama_model: str = "gemma3:1b",
         timeout_seconds: float = 3.5,
         enable_fallback: bool = True,
         gemini_api_key: Optional[str] = None
@@ -432,7 +432,7 @@ def get_llm_engine(
                 "OLLAMA_BASE_URL", "http://localhost:11434"
             ),
             ollama_model=ollama_model or os.getenv(
-                "OLLAMA_MODEL", "llama3.1:8b"
+                "OLLAMA_MODEL", "gemma3:1b"
             ),
             timeout_seconds=timeout_seconds or float(
                 os.getenv("LLM_TIMEOUT_SECONDS", "3.5")
