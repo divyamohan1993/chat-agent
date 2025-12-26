@@ -363,19 +363,24 @@ class PropertySearcher:
             except:
                 logger.warning("No .property_item found, trying alternate selectors")
             
-            # Get all property cards - use the exact selector from the HTML
-            elements = await page.query_selector_all('.property_item')
+            # Get property cards from the ACTIVE "All Projects" tab (#home) ONLY
+            # The page has two tabs: #home (All Projects) and #mandatory (Mandate Projects)
+            # We ONLY want properties from #home to avoid counting unrelated mandate/booking properties
+            elements = await page.query_selector_all('#home .property_item')
             
             if not elements or len(elements) == 0:
-                # Fallback: try within the grid columns
-                elements = await page.query_selector_all('.col-lg-4 .property_item')
+                # Fallback: try the active tab pane
+                elements = await page.query_selector_all('.tab-pane.active .property_item')
             
             if not elements or len(elements) == 0:
-                # Another fallback: try just the grid column that contains property cards
-                elements = await page.query_selector_all('.tab-content .col-lg-4')
+                # Fallback: try within #home grid columns
+                elements = await page.query_selector_all('#home .col-lg-4 .property_item')
+            
+            if not elements or len(elements) == 0:
+                # Last fallback: try any property_item but filter out booking links later
+                elements = await page.query_selector_all('.property_item')
             
             logger.info(f"Found {len(elements)} property card elements")
-            count = len(elements)
             
             # Extract property details from each card
             for i, elem in enumerate(elements[:10]):  # Limit to 10 for performance
@@ -517,14 +522,16 @@ class PropertySearcher:
                 
                 # Take unique properties only
                 properties = unique_properties_from_links[:10]
-                count = max(count, len(properties))
                 logger.info(f"Fallback extracted {len(properties)} properties from links")
                 
         except Exception as e:
             logger.error(f"Error extracting results: {e}")
         
-        logger.info(f"Found {count} total property cards, extracted {len(properties)} with unique URLs")
-        return count, properties
+        # Always use the actual unique properties count - this is the true count
+        # The DOM element count can include duplicates and mandate/booking properties
+        final_count = len(properties)
+        logger.info(f"Extracted {final_count} unique properties from #home tab")
+        return final_count, properties
     
     async def close(self):
         """Close the browser and cleanup resources."""

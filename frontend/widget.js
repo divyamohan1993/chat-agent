@@ -19,7 +19,7 @@
 
     // Configuration
     const DEFAULT_CONFIG = {
-        apiUrl: 'http://localhost:8001',
+        apiUrl: 'http://localhost:8081',
         primaryColor: '#667eea',
         secondaryColor: '#764ba2',
         position: 'bottom-right',

@@ -44,6 +44,9 @@ env/
 .env
 .env.local
 .env.*.local
+.env.production
+*.pem
+*.key
 
 # Database
 *.db

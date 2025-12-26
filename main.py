@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
@@ -77,9 +77,10 @@ async def lifespan(app: FastAPI):
     # Initialize components
     _llm_engine = LLMEngine(
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
+        ollama_model=os.getenv("OLLAMA_MODEL", "gemma3:1b"),
         timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "3.5")),
-        enable_fallback=os.getenv("ENABLE_GEMINI_FALLBACK", "true").lower() == "true"
+        enable_fallback=os.getenv("ENABLE_GEMINI_FALLBACK", "true").lower() == "true",
+        gemini_api_key=os.getenv("GEMINI_API_KEY")
     )
     
     _property_searcher = PropertySearcher(headless=True)
@@ -876,6 +877,280 @@ async def vapi_call_webhook(background_tasks: BackgroundTasks):
 
 
 # =============================================================================
+# Voice API Endpoints - Browser-based voice interaction
+# =============================================================================
+
+from pydantic import BaseModel
+from core.voice_handler import get_voice_handler, VoiceHandler
+
+
+class VoiceSpeechRequest(BaseModel):
+    """Request model for voice speech processing."""
+    session_id: str
+    speech_text: str
+    lead_name: str = "Customer"
+    lead_phone: str = ""
+
+
+class VoiceSessionRequest(BaseModel):
+    """Request model for voice session management."""
+    session_id: str
+    lead_name: str = "Customer"
+    lead_phone: str = ""
+
+
+@app.post("/api/voice/start")
+async def voice_start_session(request: VoiceSessionRequest):
+    """
+    Start a new voice call session.
+    
+    Returns the initial greeting that should be spoken to the caller.
+    """
+    voice_handler = get_voice_handler()
+    
+    # Initialize session
+    session = voice_handler.get_session(request.session_id)
+    session.collected_data['name'] = request.lead_name
+    session.collected_data['phone'] = request.lead_phone
+    
+    greeting = voice_handler.get_initial_greeting(request.lead_name)
+    
+    return {
+        "success": True,
+        "session_id": request.session_id,
+        "message": greeting,
+        "stage": "greeting",
+        "speak": greeting,  # Text to speak via TTS
+        "options": ["Yes", "No"]
+    }
+
+
+@app.post("/api/voice/process")
+async def voice_process_speech(request: VoiceSpeechRequest):
+    """
+    Process voice speech input and return next response.
+    
+    This handles:
+    - Accent variations
+    - Mispronunciations
+    - Fuzzy matching for cities, bedroom types, etc.
+    """
+    voice_handler = get_voice_handler()
+    
+    try:
+        response = await voice_handler.process_speech(
+            session_id=request.session_id,
+            speech_text=request.speech_text,
+            lead_name=request.lead_name,
+            lead_phone=request.lead_phone
+        )
+        
+        result = {
+            "success": True,
+            "session_id": request.session_id,
+            "message": response.message,
+            "speak": response.message,  # Text for TTS
+            "stage": response.next_stage,
+            "options": response.options or [],
+            "confidence": response.confidence,
+            "is_complete": response.is_complete
+        }
+        
+        if response.is_complete and response.collected_data:
+            result["collected_data"] = response.collected_data
+            # Save lead to database
+            await _save_voice_lead(request.session_id, response.collected_data)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Voice processing error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "I apologize, I'm having trouble understanding. Let me try again.",
+            "speak": "I apologize, I'm having trouble understanding. Could you please repeat that?",
+            "stage": "error"
+        }
+
+
+@app.get("/api/voice/session/{session_id}")
+async def voice_get_session(session_id: str):
+    """Get current voice session state."""
+    voice_handler = get_voice_handler()
+    
+    if session_id not in voice_handler.sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = voice_handler.sessions[session_id]
+    
+    return {
+        "session_id": session_id,
+        "current_stage": session.current_stage,
+        "collected_data": session.collected_data,
+        "conversation_history": session.conversation_history,
+        "retry_count": session.retry_count
+    }
+
+
+@app.delete("/api/voice/session/{session_id}")
+async def voice_end_session(session_id: str):
+    """End and clear a voice session."""
+    voice_handler = get_voice_handler()
+    voice_handler.clear_session(session_id)
+    
+    return {
+        "success": True,
+        "message": "Session ended"
+    }
+
+
+async def _save_voice_lead(session_id: str, collected_data: Dict[str, Any]):
+    """Save voice lead to database."""
+    try:
+        from core.database import get_database
+        
+        lead_data = {
+            "session_id": session_id,
+            "timestamp": datetime.now().isoformat(),
+            "name": collected_data.get("name", "Voice Lead"),
+            "phone": collected_data.get("phone"),
+            "email": collected_data.get("email"),
+            "consent": collected_data.get("consent", False),
+            "location": collected_data.get("location"),
+            "property_category": collected_data.get("property_category"),
+            "property_type": collected_data.get("property_type"),
+            "bedroom": collected_data.get("bedroom"),
+            "budget": collected_data.get("budget"),
+            "qualified": collected_data.get("consent", False),
+            "source": "voice_call"
+        }
+        
+        db = get_database()
+        db.create_lead(lead_data)
+        logger.info(f"Voice lead saved: {session_id}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save voice lead: {e}")
+
+
+# =============================================================================
+# Enhanced Twilio Webhooks with Voice Handler
+# =============================================================================
+
+@app.post("/webhooks/twilio/voice-ai")
+async def twilio_voice_ai_webhook(
+    background_tasks: BackgroundTasks,
+    lead_name: str = Query("Customer", description="Lead name"),
+    lead_phone: str = Query("", description="Lead phone")
+):
+    """
+    Enhanced Twilio voice webhook using AI voice handler.
+    
+    This provides more natural conversation with accent handling.
+    """
+    from fastapi.responses import Response
+    import uuid
+    
+    session_id = f"twilio-{uuid.uuid4().hex[:8]}"
+    voice_handler = get_voice_handler()
+    
+    # Initialize session
+    session = voice_handler.get_session(session_id)
+    session.collected_data['name'] = lead_name
+    session.collected_data['phone'] = lead_phone
+    
+    greeting = voice_handler.get_initial_greeting(lead_name)
+    
+    twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" timeout="5" speechTimeout="auto" 
+            action="/webhooks/twilio/process-ai?session_id={session_id}&amp;lead_name={lead_name}&amp;lead_phone={lead_phone}"
+            hints="yes, no, residential, commercial, apartment, villa, noida, mumbai, delhi, bangalore, 1 BHK, 2 BHK, 3 BHK, 4 BHK">
+        <Say voice="Polly.Aditi" language="en-IN">
+            {greeting}
+        </Say>
+    </Gather>
+    <Say voice="Polly.Aditi" language="en-IN">I didn't hear anything. Goodbye!</Say>
+    <Hangup/>
+</Response>'''
+    
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.post("/webhooks/twilio/process-ai")
+async def twilio_process_ai_webhook(
+    background_tasks: BackgroundTasks,
+    session_id: str = Query(..., description="Session ID"),
+    lead_name: str = Query("Customer"),
+    lead_phone: str = Query(""),
+    SpeechResult: str = Query(None, description="Transcribed speech from Twilio"),
+    Confidence: float = Query(0.0, description="Speech recognition confidence")
+):
+    """
+    Process Twilio speech input using AI voice handler.
+    
+    Handles accents, mispronunciations, and variations.
+    """
+    from fastapi.responses import Response
+    
+    speech = SpeechResult or ""
+    logger.info(f"Twilio AI: session={session_id}, speech='{speech}', confidence={Confidence}")
+    
+    voice_handler = get_voice_handler()
+    
+    try:
+        response = await voice_handler.process_speech(
+            session_id=session_id,
+            speech_text=speech,
+            lead_name=lead_name,
+            lead_phone=lead_phone
+        )
+        
+        if response.is_complete:
+            # Save lead and end call
+            if response.collected_data:
+                await _save_voice_lead(session_id, response.collected_data)
+            
+            twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aditi" language="en-IN">
+        {response.message}
+    </Say>
+    <Hangup/>
+</Response>'''
+        else:
+            # Continue conversation with hints for better recognition
+            hints = "yes, no, residential, commercial, apartment, villa, plot, office, shop"
+            if response.options:
+                hints = ", ".join(response.options) + ", " + hints
+            
+            twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" timeout="6" speechTimeout="auto" 
+            action="/webhooks/twilio/process-ai?session_id={session_id}&amp;lead_name={lead_name}&amp;lead_phone={lead_phone}"
+            hints="{hints}">
+        <Say voice="Polly.Aditi" language="en-IN">
+            {response.message}
+        </Say>
+    </Gather>
+    <Say voice="Polly.Aditi" language="en-IN">I didn't catch that. Let me transfer you to an agent.</Say>
+</Response>'''
+        
+        return Response(content=twiml, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Twilio AI processing error: {e}")
+        twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aditi" language="en-IN">
+        I apologize, I'm having technical difficulties. Let me transfer you to an agent.
+    </Say>
+</Response>'''
+        return Response(content=twiml, media_type="application/xml")
+
+
+# =============================================================================
 # CLI Functions
 # =============================================================================
 
@@ -948,7 +1223,7 @@ def main():
         "--host", default="0.0.0.0", help="Host to bind"
     )
     server_parser.add_argument(
-        "--port", type=int, default=8000, help="Port to bind"
+        "--port", type=int, default=8081, help="Port to bind"
     )
     server_parser.add_argument(
         "--reload", action="store_true", help="Enable auto-reload"
@@ -993,7 +1268,7 @@ def main():
         # Default: start server
         console.print(Panel.fit(
             "[bold blue]RealtyAssistant AI Agent[/bold blue]\n"
-            "[dim]Starting server on 0.0.0.0:8000[/dim]\n\n"
+            "[dim]Starting server on 0.0.0.0:8081[/dim]\n\n"
             "[yellow]Usage:[/yellow]\n"
             "  python main.py serve    - Start API server\n"
             "  python main.py cli      - Interactive CLI\n"
@@ -1004,7 +1279,7 @@ def main():
         uvicorn.run(
             "main:app",
             host=os.getenv("HOST", "0.0.0.0"),
-            port=int(os.getenv("PORT", "8000")),
+            port=int(os.getenv("PORT", "8081")),
             reload=os.getenv("DEBUG", "false").lower() == "true"
         )
 

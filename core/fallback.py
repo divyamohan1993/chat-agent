@@ -37,8 +37,8 @@ class GeminiFallback:
     """
     
     SUPPORTED_MODELS = [
-        "gemini-2.0-flash",
         "gemini-2.0-flash-exp",
+        "gemini-2.0-flash",
         "gemini-1.5-flash",
         "gemini-1.5-flash-8b", 
         "gemini-1.5-pro"
@@ -47,7 +47,7 @@ class GeminiFallback:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = "gemini-2.0-flash-exp",
         max_retries: int = 3
     ):
         """
@@ -325,7 +325,7 @@ _gemini_instance: Optional[GeminiFallback] = None
 
 def get_gemini_fallback(
     api_key: Optional[str] = None,
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = "gemini-2.0-flash-exp"
 ) -> GeminiFallback:
     """
     Get or create a singleton GeminiFallback instance.
