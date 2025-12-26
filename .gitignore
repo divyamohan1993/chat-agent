@@ -1,3 +1,7 @@
+# =============================================================
+# RealtyAssistant AI Agent - Git Ignore
+# =============================================================
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,11 +23,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual Environment
 venv/
 ENV/
 env/
+.venv/
 
 # IDE
 .vscode/
@@ -31,16 +37,28 @@ env/
 *.swp
 *.swo
 *~
+.spyderproject
+.spyproject
 
-# Environment
+# Environment & Secrets
 .env
 .env.local
+.env.*.local
 
-# Data (keep structure but not content)
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Data directories (keep structure, not content)
 data/logs/*
 data/leads/*
+data/emails/*
+data/email_queue/*
 !data/logs/.gitkeep
 !data/leads/.gitkeep
+!data/emails/.gitkeep
+!data/email_queue/.gitkeep
 
 # Testing
 .pytest_cache/
@@ -48,10 +66,37 @@ data/leads/*
 htmlcov/
 .tox/
 .nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+
+# Verification/test scripts (development only)
+verify_*.py
+test_search.py
+
+# Node (if any frontend build tools used)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

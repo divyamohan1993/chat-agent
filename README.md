@@ -16,50 +16,34 @@ RealtyAssistant AI Agent is a production-ready system that qualifies real estate
 - 🤖 **Hybrid LLM Architecture**: Local Ollama inference with Gemini fallback
 - 🔍 **Live Property Search**: Real-time scraping of realtyassistant.in
 - 📊 **Deterministic Qualification**: Clear rules for lead qualification
-- 💾 **Full Persistence**: Conversation transcripts and JSON summaries
+- 💾 **Full Persistence**: SQLite database + conversation transcripts
 - 🚀 **CPU-Optimized**: Runs entirely on CPU - no GPU required
 
-## 📁 Project Structure
+## � Quick Start (One Command)
 
-```
-realty-agent-onboard/
-├── .env.example           # Environment configuration template
-├── main.py                # FastAPI server & CLI entry point
-├── agent.py               # Main qualification agent logic
-├── models.py              # Pydantic data models
-├── requirements.txt       # Python dependencies
-├── core/                  # Core engine modules
-│   ├── __init__.py
-│   ├── whisper_engine.py  # Local STT with faster-whisper
-│   ├── llm_engine.py      # Hybrid LLM (Ollama + Gemini)
-│   ├── fallback.py        # Gemini API fallback
-│   └── search_scout.py    # Property search scraper
-├── data/                  # Persistence layer
-│   ├── logs/              # Conversation transcripts
-│   └── leads/             # Qualification summaries (JSON)
-├── prompts/               # AI prompt templates
-│   ├── system_prompt.md   # System instructions
-│   └── conversation_templates.json
-├── docs/                  # Documentation
-│   └── INTEGRATION_NOTES.md
-└── tests/                 # Test suite
-    └── test_agent.py
+### Windows
+
+```batch
+run_project.bat
 ```
 
-## 🚀 Quick Start
+This single script will:
+1. ✅ Check Python installation
+2. ✅ Create/verify virtual environment
+3. ✅ Install all dependencies
+4. ✅ Setup Playwright browsers
+5. ✅ Create required directories
+6. ✅ Check if port is available (with auto-kill option)
+7. ✅ Start the server
 
-### Prerequisites
+**Access the demo at:** http://localhost:8000/demo
 
-- Python 3.10+
-- [Ollama](https://ollama.ai/) (optional, for local LLM)
-- Google Gemini API key (for fallback)
-
-### Installation
-
-1. **Clone and setup virtual environment**
+### Manual Setup (Any OS)
 
 ```bash
-cd realty-agent-onboard
+# Clone repository
+git clone https://github.com/divyamohan1993/chat-agent.git
+cd chat-agent
 
 # Create virtual environment
 python -m venv venv
@@ -69,50 +53,45 @@ venv\Scripts\activate
 
 # Activate (Linux/Mac)
 source venv/bin/activate
-```
 
-2. **Install dependencies**
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-
-# Install Playwright browsers
 playwright install chromium
-```
 
-3. **Configure environment**
+# Copy and configure environment
+cp .env.example .env
 
-```bash
-# Copy example config
-copy .env.example .env
-
-# Edit .env with your API keys
-notepad .env
-```
-
-4. **Setup local LLM (optional)**
-
-```bash
-# Install Ollama from https://ollama.ai/
-# Then pull the model
-ollama pull llama3.1:8b
-```
-
-### Running the Agent
-
-**Start the API server:**
-```bash
+# Start server
 python main.py serve
 ```
 
-**Interactive CLI mode:**
-```bash
-python main.py cli
-```
+## 📁 Project Structure
 
-**Run simulation:**
-```bash
-python main.py simulate --name "John Doe" --phone "9876543210"
+```
+chat-agent/
+├── run_project.bat        # One-click setup & run (Windows)
+├── .env.example           # Environment configuration template
+├── main.py                # FastAPI server & CLI entry point
+├── agent.py               # Main qualification agent logic
+├── models.py              # Pydantic data models
+├── requirements.txt       # Python dependencies
+├── core/                  # Core engine modules
+│   ├── __init__.py
+│   ├── database.py        # SQLite lead storage
+│   ├── whisper_engine.py  # Local STT with faster-whisper
+│   ├── llm_engine.py      # Hybrid LLM (Ollama + Gemini)
+│   ├── fallback.py        # Gemini API fallback
+│   └── search_scout.py    # Property search scraper
+├── frontend/              # Web UI
+│   ├── index.html         # Demo page
+│   └── widget.js          # Chat widget
+├── data/                  # Persistence layer
+│   ├── logs/              # Conversation transcripts
+│   ├── leads/             # Lead summaries (JSON backup)
+│   └── emails/            # Email queue/logs
+├── prompts/               # AI prompt templates
+├── docs/                  # Documentation
+└── tests/                 # Test suite
 ```
 
 ## 📡 API Endpoints
@@ -120,32 +99,15 @@ python main.py simulate --name "John Doe" --phone "9876543210"
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | API info and status |
+| `/demo` | GET | Chat widget demo page |
 | `/api/status` | GET | System component status |
 | `/api/qualify` | POST | Trigger lead qualification |
 | `/api/search` | GET | Search properties on realtyassistant.in |
-| `/api/leads` | GET | List all lead summaries |
-| `/api/leads/{id}` | GET | Get specific lead details |
+| `/api/leads` | GET/POST | List or create leads |
+| `/api/leads/{session_id}` | GET | Get specific lead details |
 | `/api/transcripts/{id}` | GET | Get conversation transcript |
-| `/api/initiate-call` | POST | Initiate outbound voice call (Twilio/VAPI) |
-| `/demo` | GET | Chat widget demo page |
-| `/webhooks/twilio/voice` | POST | Twilio voice webhook (TwiML) |
-| `/webhooks/vapi/call` | POST | VAPI.ai webhook |
-
-### Qualify a Lead
-
-```bash
-curl -X POST http://localhost:8000/api/qualify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lead": {
-      "name": "John Doe",
-      "phone": "9876543210",
-      "email": "john@example.com"
-    },
-    "mode": "chat",
-    "simulate": true
-  }'
-```
+| `/api/send-summary-email` | POST | Send email summary |
+| `/api/initiate-call` | POST | Initiate outbound voice call |
 
 ### Search Properties
 
@@ -155,76 +117,24 @@ curl "http://localhost:8000/api/search?location=Mumbai&property_type=residential
 
 ## 🎯 Conversation Flow
 
-1. **Greeting** - Verify lead identity
+1. **Greeting** - Welcome and introduction
 2. **Location** - Collect preferred area
-3. **Property Type** - Residential or Commercial
-4. **Topology** - BHK type or commercial subtype
-5. **Budget** - Budget range (parsed to numeric)
-6. **Consent** - Sales representative consent
-7. **Search** - Query realtyassistant.in
-8. **Closing** - Deliver result and end
+3. **Category** - Residential or Commercial
+4. **Property Type** - Apartment, Villa, Plot, etc.
+5. **Bedroom** - BHK configuration
+6. **Possession** - Timeline preference
+7. **Search** - Query realtyassistant.in and display results
+8. **Consent** - Ask if user wants sales representative contact
+9. **Contact Info** - Collect phone/email (if consent given)
+10. **Closing** - Thank you and save lead
 
 ## ✅ Qualification Rules
 
-A lead is **QUALIFIED** if ALL conditions are met:
-- ✓ Matching properties found > 0
-- ✓ Sales consent = Yes
-- ✓ Budget successfully parsed to numeric
+A lead is **QUALIFIED** if:
+- ✓ User consents to sales representative contact
+- ✓ Valid contact information provided
 
-Otherwise, the lead is **NOT QUALIFIED**.
-
-## 📤 Output Format
-
-### Qualification Summary (JSON)
-
-```json
-{
-  "session_id": "abc123",
-  "lead": {
-    "name": "John Doe",
-    "phone": "9876543210",
-    "email": "john@example.com"
-  },
-  "collected_data": {
-    "contact_name": "John Doe",
-    "location": "Mumbai, Andheri",
-    "property_type": "residential",
-    "topology": "2 BHK",
-    "budget_raw": "50 to 60 lakhs",
-    "budget_min": 5000000,
-    "budget_max": 6000000,
-    "sales_consent": true,
-    "property_count": 5
-  },
-  "status": "qualified",
-  "reason": {
-    "property_count_check": true,
-    "consent_check": true,
-    "budget_parsed_check": true,
-    "summary": "Lead qualified: 5 properties found, consent given, budget parsed successfully."
-  },
-  "conversation_turns": 14,
-  "duration_seconds": 45.2
-}
-```
-
-### Conversation Transcript
-
-```
-Session ID: abc123
-Lead: John Doe (9876543210)
-Mode: chat
-Started: 2024-01-15T10:30:00
-Ended: 2024-01-15T10:30:45
-==================================================
-
-[Agent]: Hello — this is RealtyAssistant calling about the enquiry you submitted. Am I speaking with John Doe?
-[User]: Yes, this is John speaking.
-[Agent]: Great, John Doe! Thank you for confirming.
-[Agent]: Which location are you searching in?
-[User]: Mumbai, Andheri West
-...
-```
+Otherwise, the lead is **NOT QUALIFIED** (property search still shown).
 
 ## 🔧 Configuration
 
@@ -232,13 +142,13 @@ Ended: 2024-01-15T10:30:45
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEMINI_API_KEY` | - | Google Gemini API key |
+| `GOOGLE_API_KEY` | - | Google Gemini API key (fallback) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `llama3.1:8b` | Local LLM model |
+| `OLLAMA_MODEL` | `gemma3:1b` | Local LLM model |
 | `LLM_TIMEOUT_SECONDS` | `3.5` | Fallback threshold |
-| `WHISPER_MODEL` | `base.en` | STT model |
 | `HOST` | `0.0.0.0` | Server host |
 | `PORT` | `8000` | Server port |
+| `SMTP_*` | - | Email configuration (optional) |
 
 ## 🧪 Testing
 
@@ -246,22 +156,13 @@ Ended: 2024-01-15T10:30:45
 # Run all tests
 pytest tests/ -v
 
-# Run specific test
-pytest tests/test_agent.py::TestQualificationLogic -v
-
 # Run with coverage
 pytest tests/ --cov=. --cov-report=html
 ```
 
-## 📞 Twilio/VAPI Integration
+## 📞 Voice Integration (Optional)
 
-See [docs/INTEGRATION_NOTES.md](docs/INTEGRATION_NOTES.md) for detailed integration instructions.
-
-### Quick Setup
-
-1. Configure webhook URLs in Twilio/VAPI dashboard
-2. Add credentials to `.env`
-3. Implement TwiML responses in `/webhooks/twilio/voice`
+Supports Twilio and VAPI.ai for outbound voice calls. See [docs/INTEGRATION_NOTES.md](docs/INTEGRATION_NOTES.md) for setup instructions.
 
 ## 🏗️ Architecture
 
@@ -271,16 +172,15 @@ See [docs/INTEGRATION_NOTES.md](docs/INTEGRATION_NOTES.md) for detailed integrat
 ├─────────────────────────────────────────────────────────────┤
 │                    Qualification Agent                       │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────┐ │
-│  │ Whisper │  │  LLM    │  │ Property│  │   Persistence   │ │
-│  │ (STT)   │  │ Engine  │  │ Searcher│  │ (Logs + JSON)   │ │
+│  │ Whisper │  │  LLM    │  │ Property│  │   Database      │ │
+│  │ (STT)   │  │ Engine  │  │ Searcher│  │   (SQLite)      │ │
 │  └────┬────┘  └────┬────┘  └────┬────┘  └────────┬────────┘ │
-│       │            │            │                 │          │
 └───────┼────────────┼────────────┼─────────────────┼──────────┘
         │            │            │                 │
         v            v            v                 v
    ┌────────┐  ┌──────────┐  ┌──────────┐    ┌──────────┐
-   │ Audio  │  │ Ollama/  │  │ Realty   │    │  File    │
-   │ Input  │  │ Gemini   │  │ Assistant│    │  System  │
+   │ Audio  │  │ Ollama/  │  │ Realty   │    │  Local   │
+   │ Input  │  │ Gemini   │  │ Assistant│    │  Storage │
    └────────┘  └──────────┘  └──────────┘    └──────────┘
 ```
 
@@ -288,14 +188,6 @@ See [docs/INTEGRATION_NOTES.md](docs/INTEGRATION_NOTES.md) for detailed integrat
 
 MIT License - see LICENSE file for details.
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
 ---
 
-Built with ❤️ for real estate lead qualification.
+Built with ❤️ by [dmj.one](https://dmj.one)

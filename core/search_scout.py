@@ -41,7 +41,7 @@ class PropertySearcher:
     """
     
     BASE_URL = "https://realtyassistant.in"
-    SEARCH_TIMEOUT = 30000  # 30 seconds
+    SEARCH_TIMEOUT = 45000  # 45 seconds
     
     def __init__(self, headless: bool = True):
         """
@@ -154,7 +154,10 @@ class PropertySearcher:
                 
                 try:
                     await page.goto(search_url, timeout=self.SEARCH_TIMEOUT)
-                    await page.wait_for_load_state("networkidle", timeout=self.SEARCH_TIMEOUT)
+                    # Use domcontentloaded instead of networkidle for faster/more reliable loading
+                    await page.wait_for_load_state("domcontentloaded", timeout=self.SEARCH_TIMEOUT)
+                    # Give a small delay for dynamic content
+                    await page.wait_for_timeout(3000)
                     
                     # Extract property count and listings
                     count, properties = await self._extract_results(page)
@@ -326,118 +329,201 @@ class PropertySearcher:
     async def _extract_results(self, page) -> tuple:
         """
         Extract property count and listings from realtyassistant.in.
+        Uses exact selectors matching the site's HTML structure.
+        
+        HTML Structure (from site):
+        - .property_item - Main property card container
+        - .image img - Property image
+        - h2.property-name-wrap a - Title and link
+        - .proerty_text p - Location (with i.fa-map-marker icon)
+        - span.area-icon - Area info
+        - span.price-sec - Price
+        - .prop-price-wrap span (near icon-document-time) - Status
         
         Args:
             page: Playwright page object
             
         Returns:
-            Tuple of (count, properties list with links)
+            Tuple of (count, properties list with unique links)
         """
         count = 0
         properties = []
+        seen_urls = set()  # Track unique URLs to avoid duplicates
         
         try:
-            # Wait for property cards to load
-            await page.wait_for_selector('.col-md-4, .property-card, .card', timeout=10000)
+            # Wait for the property container to load first
+            await page.wait_for_selector('#property, .properties', timeout=10000)
             
-            # Try multiple selectors for property cards on realtyassistant.in
-            property_selectors = [
-                '.col-md-4 .card',  # Main property card structure
-                '.property-box',
-                '.property-card',
-                '.listing-card',
-                '[class*="property"]'
-            ]
+            # Give additional time for dynamic content
+            await page.wait_for_timeout(2000)
             
-            elements = []
-            for selector in property_selectors:
-                try:
-                    elements = await page.query_selector_all(selector)
-                    if elements and len(elements) > 0:
-                        logger.info(f"Found {len(elements)} elements with selector: {selector}")
-                        break
-                except Exception:
-                    continue
+            # Wait for actual property items to appear
+            try:
+                await page.wait_for_selector('.property_item', timeout=10000)
+            except:
+                logger.warning("No .property_item found, trying alternate selectors")
             
+            # Get all property cards - use the exact selector from the HTML
+            elements = await page.query_selector_all('.property_item')
+            
+            if not elements or len(elements) == 0:
+                # Fallback: try within the grid columns
+                elements = await page.query_selector_all('.col-lg-4 .property_item')
+            
+            if not elements or len(elements) == 0:
+                # Another fallback: try just the grid column that contains property cards
+                elements = await page.query_selector_all('.tab-content .col-lg-4')
+            
+            logger.info(f"Found {len(elements)} property card elements")
             count = len(elements)
             
-            # Extract property details from cards
+            # Extract property details from each card
             for i, elem in enumerate(elements[:10]):  # Limit to 10 for performance
                 try:
                     property_info = {'index': i + 1}
                     
-                    # Try to get title (h5, h4, or any heading)
-                    title_selectors = ['h5 a', 'h5', 'h4 a', 'h4', '.card-title', '.title', 'a.property-title']
-                    for sel in title_selectors:
-                        title_elem = await elem.query_selector(sel)
-                        if title_elem:
-                            property_info['title'] = (await title_elem.inner_text()).strip()
-                            break
+                    # Get title and link from h2.property-name-wrap a
+                    # Exact HTML: <h2 class="property-name-wrap"><a href="...">Title</a></h2>
+                    link_elem = await elem.query_selector('h2.property-name-wrap a')
+                    if not link_elem:
+                        # Fallback: try the proerty_text path (note the typo in the actual site)
+                        link_elem = await elem.query_selector('.proerty_text h2 a')
+                    if not link_elem:
+                        # Fallback: try any property link
+                        link_elem = await elem.query_selector('a[href*="/property/"]')
                     
-                    # Try to get link
-                    link_selectors = ['a[href*="property"]', 'a[href*="project"]', 'h5 a', 'h4 a', '.card a', 'a']
-                    for sel in link_selectors:
-                        link_elem = await elem.query_selector(sel)
-                        if link_elem:
-                            href = await link_elem.get_attribute('href')
-                            if href:
-                                if not href.startswith('http'):
-                                    href = f"https://realtyassistant.in{href}"
-                                property_info['link'] = href
-                                break
+                    if link_elem:
+                        href = await link_elem.get_attribute('href')
+                        title_text = await link_elem.inner_text()
+                        
+                        if href and '/property/' in href:
+                            if not href.startswith('http'):
+                                href = f"https://realtyassistant.in{href}"
+                            
+                            # Skip duplicates
+                            if href in seen_urls:
+                                continue
+                            
+                            property_info['link'] = href
+                            property_info['title'] = title_text.strip() if title_text else ''
+                            seen_urls.add(href)
                     
-                    # Try to get location
-                    location_selectors = ['p i.fa-map-marker', '.location', 'span.location', 'p:has(i.fa-map-marker)']
-                    for sel in location_selectors:
-                        loc_elem = await elem.query_selector(sel)
-                        if loc_elem:
-                            loc_text = await loc_elem.get_attribute('title') or await loc_elem.inner_text()
-                            property_info['location'] = loc_text.strip() if loc_text else ''
-                            break
+                    # Skip if no link found
+                    if not property_info.get('link'):
+                        continue
                     
-                    # Try to get area/size
-                    area_selectors = ['p i.fa-home', '.area', '.size', 'span:has(i.fa-home)']
-                    for sel in area_selectors:
-                        area_elem = await elem.query_selector(sel)
-                        if area_elem:
-                            area_text = await area_elem.inner_text()
-                            property_info['area'] = area_text.strip() if area_text else ''
-                            break
+                    # Get location from .proerty_text p (contains fa-map-marker icon)
+                    # Exact HTML: <p><i class="fa fa-map-marker"></i> Location Text</p>
+                    loc_elem = await elem.query_selector('.proerty_text p')
+                    if loc_elem:
+                        loc_text = await loc_elem.inner_text()
+                        if loc_text:
+                            property_info['location'] = loc_text.strip()
                     
-                    # Try to get price
-                    price_selectors = ['.price', 'span:contains("₹")', 'span:contains("Request")', '.property-price', 'p:contains("₹")']
-                    for sel in ['span.text-success', 'span:has-text("Request")', '.price']:
-                        price_elem = await elem.query_selector(sel)
-                        if price_elem:
-                            property_info['price'] = (await price_elem.inner_text()).strip()
-                            break
+                    # Get area from span.area-icon
+                    # Exact HTML: <span class="area-icon"><img ...>Area Value</span>
+                    area_elem = await elem.query_selector('span.area-icon')
+                    if area_elem:
+                        area_text = await area_elem.inner_text()
+                        if area_text:
+                            # Clean area text - remove extra whitespace
+                            property_info['area'] = ' '.join(area_text.split())
                     
-                    # Try to get status
-                    status_selectors = ['span.badge', '.status', '.project-status']
-                    for sel in status_selectors:
-                        status_elem = await elem.query_selector(sel)
-                        if status_elem:
-                            property_info['status'] = (await status_elem.inner_text()).strip()
-                            break
+                    # Get price from span.price-sec
+                    # Exact HTML: <span class="price-sec pull-right">₹Price</span>
+                    price_elem = await elem.query_selector('span.price-sec')
+                    if price_elem:
+                        price_text = await price_elem.inner_text()
+                        if price_text:
+                            property_info['price'] = price_text.strip()
                     
-                    # Only add if we have at least a title
-                    if property_info.get('title'):
+                    # Set default price if not found
+                    if not property_info.get('price'):
+                        property_info['price'] = '₹On Request'
+                    
+                    # Get status (possession/construction status)
+                    # HTML has span with class like "possesion=wrap" (note the typo in the site)
+                    # Near <i class="icon-document-time"> icon
+                    status_found = False
+                    
+                    # First try to get all prop-price-wrap elements and look for status text
+                    prop_wraps = await elem.query_selector_all('.prop-price-wrap')
+                    for wrap in prop_wraps:
+                        try:
+                            wrap_text = await wrap.inner_text()
+                            if wrap_text:
+                                wrap_text = wrap_text.strip()
+                                # Check for common status keywords
+                                if 'New Launch' in wrap_text:
+                                    property_info['status'] = 'New Launch'
+                                    status_found = True
+                                    break
+                                elif 'Ready to move' in wrap_text or 'Ready To Move' in wrap_text:
+                                    property_info['status'] = 'Ready to move in'
+                                    status_found = True
+                                    break
+                                elif 'Under Construction' in wrap_text:
+                                    property_info['status'] = 'Under Construction'
+                                    status_found = True
+                                    break
+                                elif 'Launching soon' in wrap_text:
+                                    property_info['status'] = 'Launching soon'
+                                    status_found = True
+                                    break
+                        except:
+                            continue
+                    
+                    # Get image from .image img
+                    # Exact HTML: <div class="image"><a href="..."><img src="..." alt="..."></a></div>
+                    img_elem = await elem.query_selector('.image img')
+                    if img_elem:
+                        img_src = await img_elem.get_attribute('src')
+                        if img_src:
+                            property_info['image'] = img_src
+                    
+                    # Only add if we have title and link
+                    if property_info.get('title') and property_info.get('link'):
                         properties.append(property_info)
+                        logger.debug(f"Extracted property {i+1}: {property_info.get('title', 'No title')}")
                         
                 except Exception as e:
                     logger.debug(f"Error extracting property {i}: {e}")
                     continue
             
-            # If we couldn't extract from cards, count visible cards
-            if count == 0:
-                # Try alternate counting methods
-                all_links = await page.query_selector_all('a[href*="property"], a[href*="project"]')
-                count = min(len(all_links), 20)  # Cap at reasonable number
+            # Fallback: if no properties extracted from cards, try to get links directly
+            if len(properties) == 0:
+                logger.info("Card extraction failed, trying link fallback")
+                all_links = await page.query_selector_all('a[href*="/property/"]')
+                unique_properties_from_links = []
+                
+                for link_elem in all_links[:30]:  # Check more links
+                    try:
+                        href = await link_elem.get_attribute('href')
+                        if href and '/property/' in href and href not in seen_urls:
+                            if not href.startswith('http'):
+                                href = f"https://realtyassistant.in{href}"
+                            
+                            title = await link_elem.inner_text()
+                            if title and title.strip() and len(title.strip()) > 5:  # Filter out short non-title text
+                                seen_urls.add(href)
+                                unique_properties_from_links.append({
+                                    'index': len(unique_properties_from_links) + 1,
+                                    'title': title.strip(),
+                                    'link': href,
+                                    'price': '₹On Request'
+                                })
+                    except:
+                        continue
+                
+                # Take unique properties only
+                properties = unique_properties_from_links[:10]
+                count = max(count, len(properties))
+                logger.info(f"Fallback extracted {len(properties)} properties from links")
                 
         except Exception as e:
             logger.error(f"Error extracting results: {e}")
         
-        logger.info(f"Found {count} properties, extracted {len(properties)} details")
+        logger.info(f"Found {count} total property cards, extracted {len(properties)} with unique URLs")
         return count, properties
     
     async def close(self):

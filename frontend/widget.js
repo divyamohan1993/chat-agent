@@ -19,7 +19,7 @@
 
     // Configuration
     const DEFAULT_CONFIG = {
-        apiUrl: 'http://localhost:8080',
+        apiUrl: 'http://localhost:8001',
         primaryColor: '#667eea',
         secondaryColor: '#764ba2',
         position: 'bottom-right',
@@ -79,20 +79,6 @@
             field: 'bedroom',
             // Exact match to form
             options: ['1 BHK', '2 BHK', '3 BHK', '4 BHK', '5 BHK', 'Studio'],
-            next: 'project_status'
-        },
-        project_status: {
-            question: "What's your preferred project status? 🏗️",
-            field: 'project_status',
-            // Exact match to form
-            options: ['Launching soon', 'New Launch', 'Under Construction', 'Ready to move in'],
-            next: 'possession'
-        },
-        possession: {
-            question: "When do you need possession? ⏰",
-            field: 'possession',
-            // Exact match to form
-            options: ['3 Months', '6 Months', '1 year', '2+ years', 'Ready To Move'],
             next: 'search_and_show' // Trigger search after possession
         },
         // After search, ask if user wants to be contacted
@@ -1414,17 +1400,17 @@
         setTimeout(() => {
             hideTyping();
 
-            // Show results message
+            // Show results message with total count
             if (propertyCount > 0) {
                 addBotMessage(`🎉 Great news, ${state.collectedData.name}! I found **${propertyCount} matching properties** in ${state.collectedData.location}!`);
             } else {
                 addBotMessage(`I searched for properties matching your criteria in ${state.collectedData.location}, but couldn't find exact matches right now. Our property experts can help you find similar options!`);
             }
 
-            // Show property listings if we have results
+            // Show top 3 property listings with total count info
             if (apiSuccess && properties.length > 0) {
                 setTimeout(() => {
-                    showApiPropertyListings(properties.slice(0, 3)); // Top 3
+                    showApiPropertyListings(properties.slice(0, 3), propertyCount); // Top 3 + total count
                 }, 600);
             }
 
@@ -1740,64 +1726,105 @@
     // Now we only use showApiPropertyListings for real API data
 
     // Show property listings from API with direct links to actual properties
-    // Shows ALL properties returned by search - no forced limit
-    function showApiPropertyListings(properties) {
+    // Shows top 3 properties with total count info for exploration
+    function showApiPropertyListings(properties, totalCount = 0) {
         if (!properties || properties.length === 0) {
             return; // Don't show anything if no properties
         }
 
         const messagesContainer = document.getElementById('realtyMessages');
-
         const listingDiv = document.createElement('div');
         listingDiv.className = 'realty-message bot';
 
-        const icons = ['🏠', '🏢', '🏡'];
+        const defaultIcons = ['🏠', '🏢', '🏡'];
         const searchUrl = buildRealtyAssistantUrl();
+        const remainingCount = totalCount > 3 ? totalCount - 3 : 0;
 
-        // Show ALL properties from API - no artificial limit
+        // Generate property cards with images and clickable links
         const propertyCards = properties.map((prop, idx) => {
-            // Use direct property link if available, otherwise search URL
             const propertyUrl = prop.link || searchUrl;
             const title = prop.title || `Property ${idx + 1}`;
             const location = prop.location || state.collectedData.location || '';
             const price = prop.price || '₹On Request';
             const area = prop.area || '';
             const status = prop.status || '';
+            const hasImage = prop.image && prop.image.startsWith('http');
+
+            // Use image if available, otherwise show icon
+            const imageContent = hasImage
+                ? `<img src="${prop.image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">`
+                : `<span style="font-size: 28px;">${defaultIcons[idx % 3]}</span>`;
 
             return `
-            <a href="${propertyUrl}" target="_blank" class="realty-property-link" style="text-decoration: none; color: inherit;">
-                <div class="realty-property-card" style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(102,126,234,0.25)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
-                    <div class="realty-property-image">${icons[idx % 3]}</div>
-                    <div class="realty-property-info">
-                        <div class="realty-property-title" style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">${title}</div>
-                        <div class="realty-property-price" style="color: #667eea; font-weight: 500; margin-bottom: 4px;">${price}</div>
-                        <div class="realty-property-details" style="color: #64748b; font-size: 0.85rem;">
-                            ${location}${area ? ` • ${area}` : ''}${status ? `<br><span style="color: #059669; font-size: 0.75rem;">${status}</span>` : ''}
+            <a href="${propertyUrl}" target="_blank" rel="noopener noreferrer" class="realty-property-link" style="text-decoration: none; color: inherit; display: block;">
+                <div class="realty-property-card" style="cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px; margin-bottom: 10px; background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%); position: relative; overflow: hidden;" 
+                     onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 25px rgba(102,126,234,0.2)'; this.style.borderColor='rgba(102,126,234,0.4)';" 
+                     onmouseout="this.style.transform=''; this.style.boxShadow=''; this.style.borderColor='#e2e8f0';">
+                    <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(180deg, #667eea 0%, #764ba2 100%); opacity: 0; transition: opacity 0.3s;" class="card-accent"></div>
+                    <div style="display: flex; gap: 14px; align-items: flex-start;">
+                        <div style="width: 72px; height: 72px; background: linear-gradient(145deg, #e0e7ff 0%, #c7d2fe 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; box-shadow: 0 2px 8px rgba(199, 210, 254, 0.5);">
+                            ${imageContent}
                         </div>
-                        <div style="color: #667eea; font-size: 0.75rem; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
-                            <span>View Details</span>
-                            <span>→</span>
+                        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                            <div style="font-weight: 700; font-size: 0.92rem; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;">${title}</div>
+                            <div style="color: #10b981; font-weight: 700; font-size: 0.88rem;">${price}</div>
+                            <div style="color: #64748b; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                                <span>📍</span>
+                                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${location}</span>
+                            </div>
+                            ${status ? `<div style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: ${status.includes('Ready') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)'}; color: ${status.includes('Ready') ? '#059669' : '#d97706'}; border-radius: 12px; font-size: 0.7rem; font-weight: 600; width: fit-content;">${status}</div>` : ''}
+                            <div style="color: #667eea; font-size: 0.75rem; margin-top: 4px; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                <span>View Details</span>
+                                <span>→</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </a>
         `}).join('');
 
+        // Build the complete message with header and footer
         listingDiv.innerHTML = `
             <div class="realty-message-avatar">${state.config.botAvatar}</div>
-            <div>
-                <div class="realty-message-content" style="margin-bottom: 8px;">
-                    <strong>🏠 ${properties.length} Properties from RealtyAssistant:</strong>
-                    <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">Click any property to view full details ↗️</div>
+            <div style="max-width: 100%;">
+                <div class="realty-message-content" style="margin-bottom: 12px; padding: 14px 18px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 1.1rem;">🏠</span>
+                        <strong style="color: #1e293b;">Top ${properties.length} Properties</strong>
+                        ${totalCount > 3 ? `<span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">+${remainingCount} more</span>` : ''}
+                    </div>
+                    <div style="font-size: 0.82rem; color: #64748b;">Click any property to view full details on RealtyAssistant.in ↗️</div>
                 </div>
-                <div class="realty-property-list">
+                <div class="realty-property-list" style="display: flex; flex-direction: column; gap: 0;">
                     ${propertyCards}
                 </div>
+                ${totalCount > 3 ? `
+                <div style="text-align: center; margin-top: 14px; padding: 14px; background: linear-gradient(145deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; border: 1px solid rgba(186, 230, 253, 0.5);">
+                    <div style="font-size: 0.85rem; color: #0369a1; margin-bottom: 10px; font-weight: 500;">
+                        📊 <strong>${remainingCount} more properties</strong> match your criteria!
+                    </div>
+                    <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                        <a href="${searchUrl}" target="_blank" rel="noopener noreferrer" 
+                           style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; text-decoration: none; border-radius: 20px; font-size: 0.82rem; font-weight: 600; transition: all 0.2s; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);" 
+                           onmouseover="this.style.transform='scale(1.03)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.4)';" 
+                           onmouseout="this.style.transform=''; this.style.boxShadow='0 2px 8px rgba(102, 126, 234, 0.3)';">
+                            🔍 View All ${totalCount} Properties
+                        </a>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 10px;">
+                        Or continue chatting for personalized recommendations, or let our expert call you!
+                    </div>
+                </div>
+                ` : `
                 <div style="text-align: center; margin-top: 12px;">
-                    <a href="${searchUrl}" target="_blank" style="display: inline-block; padding: 8px 16px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; text-decoration: none; border-radius: 20px; font-size: 0.85rem; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform=''">
-                        🔍 View All on RealtyAssistant.in
+                    <a href="${searchUrl}" target="_blank" rel="noopener noreferrer" 
+                       style="display: inline-block; padding: 10px 18px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; text-decoration: none; border-radius: 20px; font-size: 0.85rem; font-weight: 600; transition: all 0.2s;" 
+                       onmouseover="this.style.transform='scale(1.02)';" 
+                       onmouseout="this.style.transform='';">
+                        🔍 View on RealtyAssistant.in
                     </a>
                 </div>
+                `}
             </div>
         `;
 
