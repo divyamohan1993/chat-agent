@@ -1,0 +1,41 @@
+{
+  "greeting": {
+    "initial": "Hello — this is RealtyAssistant calling about the enquiry you submitted. Am I speaking with {lead_name}?",
+    "name_mismatch": "May I know your name?",
+    "name_confirmed": "Great, {contact_name}! Thank you for confirming."
+  },
+  "location": {
+    "ask": "Which location are you searching in?",
+    "acknowledge": "Got it, {location} is a wonderful area. Let me note that down."
+  },
+  "property_type": {
+    "ask": "Are you looking for a Residential or Commercial property?",
+    "residential_ack": "Residential property it is!",
+    "commercial_ack": "Commercial property — understood!"
+  },
+  "topology": {
+    "residential_ask": "Which BHK configuration would you prefer: 1 BHK, 2 BHK, 3 BHK, or 4 BHK?",
+    "commercial_ask": "What type of commercial space are you looking for: Shop, Office, or Commercial Plot?",
+    "acknowledge": "Perfect, {topology} noted."
+  },
+  "budget": {
+    "ask": "What is your budget for this property?",
+    "acknowledge": "Thank you, I've noted your budget as {budget}.",
+    "parse_failed": "Could you please specify your budget as a number or range? For example, '50 lakhs' or '1-2 crore'."
+  },
+  "consent": {
+    "ask": "Would you like a sales representative to call you to discuss your requirements further? (Yes/No)",
+    "yes_response": "Wonderful! A representative will reach out to you soon.",
+    "no_response": "No problem at all. We'll keep your information on file."
+  },
+  "closing": {
+    "qualified": "Thanks {contact_name} — based on your inputs, we found {property_count} matching properties. We'll have a representative call you shortly to discuss the best options. Have a great day!",
+    "not_qualified": "Thanks for your time, {contact_name}. We'll keep you posted when properties matching your criteria become available. Have a great day!",
+    "no_properties": "Thanks for your time, {contact_name}. Unfortunately, we couldn't find properties matching your exact criteria right now, but we'll notify you when new listings arrive. Have a great day!"
+  },
+  "error_handling": {
+    "unclear_response": "I'm sorry, I didn't quite catch that. Could you please repeat?",
+    "invalid_input": "That doesn't seem quite right. Could you try again?",
+    "connection_error": "I apologize, we're experiencing some technical difficulties. Please try again later."
+  }
+}

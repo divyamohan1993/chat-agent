@@ -1,0 +1,242 @@
+{
+    "info": {
+        "_postman_id": "realty-assistant-collection",
+        "name": "RealtyAssistant AI Agent",
+        "description": "API Collection for RealtyAssistant AI Agent including Lead Qualification, Property Search, and auxiliary services.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Core Services",
+            "item": [
+                {
+                    "name": "Status Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/status",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "status"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Qualify Lead (Chat Mode)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"lead\": {\n        \"name\": \"John Doe\",\n        \"phone\": \"9876543210\",\n        \"email\": \"john@example.com\"\n    },\n    \"mode\": \"chat\",\n    \"simulate\": true\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/qualify",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "qualify"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Property Listing Search",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/search?location=Noida&property_type=residential&budget_max=10000000",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "location",
+                                    "value": "Noida"
+                                },
+                                {
+                                    "key": "property_type",
+                                    "value": "residential"
+                                },
+                                {
+                                    "key": "budget_max",
+                                    "value": "10000000"
+                                }
+                            ]
+                        },
+                        "description": "Real-time search on realtyassistant.in"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Leads",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/leads",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "leads"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Auxiliary Feature Placeholders",
+            "description": "Endpoints specified in requirements but currently mocked or future implementation.",
+            "item": [
+                {
+                    "name": "Semantic Search API",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"query\": \"luxury apartments with pool in greater noida\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/search/semantic",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "search",
+                                "semantic"
+                            ]
+                        },
+                        "description": "Search properties using natural language query semantics."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Inquiry API",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"lead_id\": \"12345\",\n    \"property_id\": \"prop_987\",\n    \"message\": \"Interested in visiting this weekend.\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/inquiry",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "inquiry"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Resume Shortlisting API",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "multipart/form-data"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/analyze-resume",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "analyze-resume"
+                            ]
+                        },
+                        "description": "Upload a resume PDF for AI analysis and scoring."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Horror Story AI API",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"theme\": \"haunted house\",\n    \"length\": \"short\",\n    \"characters\": [\"Alice\", \"Bob\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/generate/horror-story",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "generate",
+                                "horror-story"
+                            ]
+                        },
+                        "description": "Generate a spooky story based on inputs (Hackathon feature)."
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000"
+        }
+    ]
+}
