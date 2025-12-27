@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealtyAssistant - Leads Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5a6fd6;
+            --secondary: #764ba2;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --border: #e2e8f0;
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .brand span {
+            font-weight: 300;
+            opacity: 0.9;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-glass {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            backdrop-filter: blur(4px);
+        }
+
+        .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Main Content */
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-top: 0.5rem;
+        }
+
+        .stat-trend {
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+            color: var(--success);
+        }
+
+        /* Filters */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            background: var(--surface);
+            padding: 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+        }
+
+        .search-box {
+            position: relative;
+            width: 300px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.5rem 1rem 0.5rem 2.5rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            width: 1rem;
+            height: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        /* Table */
+        .table-container {
+            background: var(--surface);
+            border-radius: 1rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 1rem 1.5rem;
+            background: #f1f5f9;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-main);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .lead-name {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .lead-contact {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .badge-qualified {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-pending {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--surface);
+            width: 90%;
+            max-width: 600px;
+            border-radius: 1rem;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(20px);
+            transition: transform 0.3s;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-overlay.active .modal {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .detail-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            font-size: 1rem;
+            color: var(--text-main);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="brand">
+            RealtyAssistant <span>Dashboard</span>
+        </div>
+        <div class="header-actions">
+            <!-- <button class="btn btn-glass">Export CSV</button> -->
+            <button class="btn btn-glass" onclick="location.reload()">Refresh</button>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">Total Leads</span>
+                <div class="stat-value" id="total-leads">-</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Qualified</span>
+                <div class="stat-value" id="qualified-leads">-</div>
+                <div class="stat-trend" id="qualified-percent">0% conversion</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Properties Found</span>
+                <div class="stat-value" id="total-properties">-</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <div class="search-box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search by name, phone, or location...">
+            </div>
+
+            <div class="filter-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="qualified-only">
+                    <span>Show Qualified Only</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Lead</th>
+                        <th>Interest</th>
+                        <th>Budget</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="leads-body">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+            <div id="loading" style="padding: 2rem; display: flex; justify-content: center;">
+                <div class="loading-spinner"></div>
+            </div>
+            <div id="empty-message" class="empty-state" style="display: none;">
+                No leads found matching your criteria.
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="lead-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Lead Details</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-content">
+                <!-- Content filled via JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Base configuration
+        const API_BASE = window.location.origin;
+
+        let allLeads = [];
+
+        // Formatting utilities
+        const formatDate = (dateString) => {
+            if (!dateString) return '-';
+            return new Date(dateString).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        };
+
+        const formatCurrency = (val) => {
+            if (!val) return '-';
+            // Simple formatter, can be enhanced
+            return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        };
+
+        // Fetch Data
+        async function fetchLeads() {
+            try {
+                const response = await fetch(`${API_BASE}/api/leads?limit=100`);
+                const data = await response.json();
+
+                if (data.leads) {
+                    allLeads = data.leads;
+                    updateStats(allLeads);
+                    renderLeads(allLeads);
+                }
+            } catch (error) {
+                console.error('Error fetching leads:', error);
+                document.getElementById('loading').innerHTML = 'Error loading data.';
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Render functions
+        function renderLeads(leads) {
+            const tbody = document.getElementById('leads-body');
+            const emptyMsg = document.getElementById('empty-message');
+            tbody.innerHTML = '';
+
+            if (leads.length === 0) {
+                emptyMsg.style.display = 'block';
+                return;
+            }
+            emptyMsg.style.display = 'none';
+
+            leads.forEach(lead => {
+                const tr = document.createElement('tr');
+
+                const qualifiedBadge = lead.qualified
+                    ? '<span class="badge badge-qualified">Qualified</span>'
+                    : '<span class="badge badge-pending">Pending</span>';
+
+                tr.innerHTML = `
+                    <td>
+                        <div class="lead-name">${lead.name || 'Anonymous'}</div>
+                        <div class="lead-contact">${lead.phone || '-'}</div>
+                    </td>
+                    <td>
+                        <div>${lead.bedroom || ''} ${lead.property_category || lead.property_type || 'Property'}</div>
+                        <div class="lead-contact">${lead.location || ''}</div>
+                    </td>
+                    <td>${lead.budget || '-'}</td>
+                    <td>${qualifiedBadge}</td>
+                    <td>${formatDate(lead.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="viewLead('${lead.session_id}')">View</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateStats(leads) {
+            const total = leads.length;
+            const qualified = leads.filter(l => l.qualified).length;
+            const properties = leads.reduce((acc, curr) => acc + (curr.properties_found || 0), 0);
+
+            document.getElementById('total-leads').innerText = total;
+            document.getElementById('qualified-leads').innerText = qualified;
+            document.getElementById('total-properties').innerText = properties;
+
+            const percentage = total > 0 ? Math.round((qualified / total) * 100) : 0;
+            document.getElementById('qualified-percent').innerText = `${percentage}% conversion rate`;
+        }
+
+        // Search & Filter
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const qualifiedOnly = document.getElementById('qualified-only').checked;
+            filterData(term, qualifiedOnly);
+        });
+
+        document.getElementById('qualified-only').addEventListener('change', (e) => {
+            const term = document.getElementById('search-input').value.toLowerCase();
+            filterData(term, e.target.checked);
+        });
+
+        function filterData(term, qualifiedOnly) {
+            const filtered = allLeads.filter(lead => {
+                const matchesTerm = (lead.name || '').toLowerCase().includes(term) ||
+                    (lead.phone || '').toLowerCase().includes(term) ||
+                    (lead.location || '').toLowerCase().includes(term);
+
+                const matchesStatus = qualifiedOnly ? lead.qualified : true;
+
+                return matchesTerm && matchesStatus;
+            });
+            renderLeads(filtered);
+        }
+
+        // Modal
+        window.viewLead = (sessionId) => {
+            const lead = allLeads.find(l => l.session_id === sessionId);
+            if (!lead) return;
+
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <div class="grid-2">
+                    <div class="detail-group">
+                        <div class="detail-label">Name</div>
+                        <div class="detail-value">${lead.name || '-'}</div>
+                    </div>
+                    <div class="detail-group">
+                        <div class="detail-label">Phone</div>
+                        <div class="detail-value">${lead.phone || '-'}</div>
+                    </div>
+                    <div class="detail-group">
+                        <div class="detail-label">Email</div>
+                        <div class="detail-value">${lead.email || '-'}</div>
+                    </div>
+                    <div class="detail-group">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">
+                            ${lead.qualified ? '✅ Qualified' : '⏳ Pending'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Requirement</div>
+                    <div class="detail-value">
+                        Looking for <strong>${lead.bedroom || ''} ${lead.property_category || ''}</strong> in <strong>${lead.location || ''}</strong>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="detail-group">
+                        <div class="detail-label">Budget</div>
+                        <div class="detail-value">${lead.budget || '-'}</div>
+                    </div>
+                    <div class="detail-group">
+                        <div class="detail-label">Possession</div>
+                        <div class="detail-value">${lead.possession || '-'}</div>
+                    </div>
+                </div>
+
+                ${lead.search_url ? `
+                <div class="detail-group" style="margin-top: 1rem; padding: 1rem; background: #f0f9ff; border-radius: 0.5rem;">
+                    <div class="detail-label">Properties Matches</div>
+                    <div class="detail-value">Found <strong>${lead.properties_found}</strong> properties</div>
+                    <a href="${lead.search_url}" target="_blank" class="btn btn-primary" style="margin-top: 0.5rem; text-decoration: none; justify-content: center;">
+                        View Search Results
+                    </a>
+                </div>
+                ` : ''}
+
+                <div class="detail-group">
+                    <div class="detail-label">Session ID</div>
+                    <div class="detail-value" style="font-family: monospace; font-size: 0.8em; color: var(--text-muted);">${lead.session_id}</div>
+                </div>
+            `;
+
+            document.getElementById('lead-modal').classList.add('active');
+        };
+
+        window.closeModal = () => {
+            document.getElementById('lead-modal').classList.remove('active');
+        };
+
+        // Close modal on outside click
+        document.getElementById('lead-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'lead-modal') closeModal();
+        });
+
+        // Init
+        fetchLeads();
+
+    </script>
+</body>
+
+</html>

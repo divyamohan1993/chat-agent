@@ -635,7 +635,7 @@
             background: linear-gradient(145deg, #f0f9ff 0%, #e0f2fe 50%, #f0f9ff 100%);
             border: 1px solid rgba(186, 230, 253, 0.6);
             border-radius: 20px;
-            padding: 20px;
+            padding: 20px !important;
             margin-top: 12px;
             box-shadow: 0 4px 20px rgba(14, 165, 233, 0.1);
             backdrop-filter: blur(10px);

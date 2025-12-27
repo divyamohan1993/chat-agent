@@ -139,6 +139,11 @@ if frontend_dir.exists():
     async def voice_page():
         """Serve the voice testing page."""
         return FileResponse(frontend_dir / "voice.html")
+
+    @app.get("/leads", response_class=FileResponse)
+    async def leads_page():
+        """Serve the leads dashboard page."""
+        return FileResponse(frontend_dir / "leads.html")
     
     @app.get("/widget.js", response_class=FileResponse)
     async def widget_js():
