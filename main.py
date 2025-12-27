@@ -381,7 +381,11 @@ async def get_leads(
     limit: int = Query(100, description="Max leads to return"),
     offset: int = Query(0, description="Offset for pagination")
 ):
-    """Get all leads from the database."""
+    """
+    Get all leads from the database.
+    
+    Returns an empty array if database is unavailable (fail-safe behavior).
+    """
     try:
         db = get_database()
         leads = db.get_all_leads(qualified_only=qualified_only, limit=limit, offset=offset)
@@ -391,11 +395,21 @@ async def get_leads(
             "leads": leads,
             "total": total,
             "limit": limit,
-            "offset": offset
+            "offset": offset,
+            "success": True
         }
     except Exception as e:
         logger.error(f"Error getting leads: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty result instead of 500 error for fail-safe behavior
+        return {
+            "leads": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "success": False,
+            "error": str(e),
+            "message": "Database temporarily unavailable. Data will recover automatically."
+        }
 
 
 @app.get("/api/leads/{session_id}")
@@ -406,7 +420,8 @@ async def get_lead_details(session_id: str):
         lead = db.get_lead(session_id)
         
         if lead:
-            return lead.to_dict()
+            # get_lead now returns dict directly from the updated database module
+            return lead if isinstance(lead, dict) else lead.to_dict()
         
         raise HTTPException(status_code=404, detail="Lead not found")
     except HTTPException:
@@ -414,6 +429,28 @@ async def get_lead_details(session_id: str):
     except Exception as e:
         logger.error(f"Error getting lead: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/database/health")
+async def database_health():
+    """Get database health status and statistics."""
+    try:
+        db = get_database()
+        stats = db.get_database_stats()
+        return {
+            "status": "healthy" if stats.get("healthy") else "degraded",
+            "stats": stats,
+            "message": "Database is operational" if stats.get("healthy") else "Database is recovering"
+        }
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        return {
+            "status": "unavailable",
+            "error": str(e),
+            "message": "Database is initializing or recovering"
+        }
+
+
 
 
 

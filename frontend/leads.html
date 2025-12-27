@@ -479,18 +479,41 @@
     </div>
 
     <script>
-        // API Base configuration
-        const API_BASE = window.location.origin;
+        // API Base configuration - handles both localhost and production with /task1/ prefix
+        const getApiBase = () => {
+            const hostname = window.location.hostname;
+            const pathname = window.location.pathname;
+
+            // Local development
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return window.location.origin;
+            }
+
+            // Production: Check if we're under /task1/ path
+            if (pathname.startsWith('/task1')) {
+                return window.location.origin + '/task1';
+            }
+
+            // Default fallback
+            return window.location.origin;
+        };
+
+        const API_BASE = getApiBase();
+        console.log('API Base configured:', API_BASE);
 
         let allLeads = [];
 
         // Formatting utilities
         const formatDate = (dateString) => {
             if (!dateString) return '-';
-            return new Date(dateString).toLocaleDateString('en-US', {
-                month: 'short', day: 'numeric', year: 'numeric',
-                hour: '2-digit', minute: '2-digit'
-            });
+            try {
+                return new Date(dateString).toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            } catch (e) {
+                return '-';
+            }
         };
 
         const formatCurrency = (val) => {
@@ -499,22 +522,66 @@
             return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         };
 
-        // Fetch Data
+        // Fetch Data with fail-safe error handling
         async function fetchLeads() {
-            try {
-                const response = await fetch(`${API_BASE}/api/leads?limit=100`);
-                const data = await response.json();
+            const loadingEl = document.getElementById('loading');
+            const emptyMsg = document.getElementById('empty-message');
 
-                if (data.leads) {
+            try {
+                console.log('Fetching leads from:', `${API_BASE}/api/leads?limit=100`);
+                const response = await fetch(`${API_BASE}/api/leads?limit=100`);
+
+                // Check for non-OK responses
+                if (!response.ok) {
+                    console.error(`HTTP error: ${response.status} ${response.statusText}`);
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+
+                // Check content type to avoid parsing HTML as JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.error('Response is not JSON:', contentType);
+                    throw new Error('Server returned non-JSON response. API may be unavailable.');
+                }
+
+                const data = await response.json();
+                console.log('Received leads data:', data);
+
+                if (data.leads && Array.isArray(data.leads)) {
                     allLeads = data.leads;
                     updateStats(allLeads);
                     renderLeads(allLeads);
+                } else if (data.error) {
+                    throw new Error(data.error);
+                } else {
+                    // Empty response is okay - just show empty state
+                    console.log('No leads found in response');
+                    allLeads = [];
+                    updateStats([]);
+                    renderLeads([]);
                 }
             } catch (error) {
                 console.error('Error fetching leads:', error);
-                document.getElementById('loading').innerHTML = 'Error loading data.';
+
+                // Show user-friendly error message
+                loadingEl.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                        <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom: 1rem; opacity: 0.5;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <div style="font-weight: 500; margin-bottom: 0.5rem;">Unable to load leads</div>
+                        <div style="font-size: 0.875rem; margin-bottom: 1rem;">${error.message}</div>
+                        <button class="btn btn-primary" onclick="location.reload()">Retry</button>
+                    </div>
+                `;
+
+                // Still hide the loading spinner on error
+                updateStats([]);
             } finally {
-                document.getElementById('loading').style.display = 'none';
+                // Only hide loading if we succeeded or handled error above
+                if (loadingEl.querySelector('.loading-spinner')) {
+                    loadingEl.style.display = 'none';
+                }
             }
         }
 

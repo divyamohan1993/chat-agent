@@ -18,8 +18,26 @@
     'use strict';
 
     // Configuration
+    const getDefaultApiUrl = () => {
+        const hostname = window.location.hostname;
+        const pathname = window.location.pathname;
+
+        // Local development - use origin directly
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return window.location.origin;
+        }
+
+        // Production: Check if we're under /task1/ path
+        if (pathname.startsWith('/task1')) {
+            return window.location.origin + '/task1';
+        }
+
+        // Default fallback - use relative path
+        return '.';
+    };
+
     const DEFAULT_CONFIG = {
-        apiUrl: '.', // Relative path for flexibility (supports subdirectories/proxies)
+        apiUrl: getDefaultApiUrl(),
         primaryColor: '#325998', // Brand Blue
         secondaryColor: '#984275', // Brand Magenta
         position: 'bottom-right',
