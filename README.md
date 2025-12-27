@@ -37,7 +37,7 @@ This single script will:
 6. ✅ Check if port is available (with auto-kill option)
 7. ✅ Start the server
 
-**Access the demo at:** http://localhost:8081/demo
+**Access the demo at:** http://localhost:20000/demo
 
 ### Linux/Ubuntu VM (Production)
 
@@ -75,7 +75,7 @@ sudo bash run_project.sh
 | Component | Details |
 |-----------|---------|
 | **App Service** | systemd service `realtyassistant.service` |
-| **Internal Port** | 8081 (localhost only) |
+| **Internal Port** | 20000 (localhost only) |
 | **Nginx Proxy** | Serves at `/task1/` path |
 | **Domain** | `reas.dmj.one` |
 | **Public URLs** | `/task1/demo`, `/task1/voice`, `/task1/api/*` |

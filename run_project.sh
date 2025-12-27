@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 APP_NAME="realtyassistant"
-APP_PORT=8081
+APP_PORT=20000
 DOMAIN="reas.dmj.one"
 LOCATION_PATH="/task1"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -130,7 +130,7 @@ GEMINI_API_KEY=
 LOGS_DIR=data/logs
 LEADS_DIR=data/leads
 HOST=127.0.0.1
-PORT=8081
+PORT=20000
 ENVFILE
     fi
     chown "$REAL_USER:$REAL_USER" "$PROJECT_DIR/.env"
@@ -140,9 +140,34 @@ else
 fi
 
 # =============================================================================
-# STEP 7: Create Systemd Service
+# STEP 7: Create Startup Wrapper & Systemd Service
 # =============================================================================
-echo -e "${YELLOW}[7/10] Creating systemd service...${NC}"
+echo -e "${YELLOW}[7/10] Creating auto-update startup wrapper...${NC}"
+
+# Create a wrapper script that updates code/deps on boot
+WRAPPER_SCRIPT="$PROJECT_DIR/start_agent.sh"
+cat > "$WRAPPER_SCRIPT" << WRAPPEREOF
+#!/bin/bash
+# Auto-generated startup script
+cd "$PROJECT_DIR"
+
+# 1. Update Code
+echo "Checking for updates..."
+git pull origin main || echo "Git pull failed or not a git repo, continuing..."
+
+# 2. Update Dependencies
+source "$VENV_DIR/bin/activate"
+pip install -r requirements.txt -q
+
+# 3. Start Application
+exec python main.py serve --host 127.0.0.1 --port ${APP_PORT}
+WRAPPEREOF
+
+chmod +x "$WRAPPER_SCRIPT"
+chown "$REAL_USER:$REAL_USER" "$WRAPPER_SCRIPT"
+
+echo -e "${GREEN}   Startup wrapper created${NC}"
+echo -e "${YELLOW}   Creating systemd service...${NC}"
 
 cat > "/etc/systemd/system/${SERVICE_NAME}" << SERVICEEOF
 [Unit]
@@ -155,7 +180,8 @@ User=${REAL_USER}
 Group=${REAL_USER}
 WorkingDirectory=${PROJECT_DIR}
 Environment="PATH=${VENV_DIR}/bin"
-ExecStart=${VENV_DIR}/bin/python main.py serve --host 127.0.0.1 --port ${APP_PORT}
+# Run the wrapper script instead of python directly
+ExecStart=${WRAPPER_SCRIPT}
 Restart=always
 RestartSec=5
 StandardOutput=journal

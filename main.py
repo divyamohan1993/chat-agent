@@ -1223,7 +1223,7 @@ def main():
         "--host", default="0.0.0.0", help="Host to bind"
     )
     server_parser.add_argument(
-        "--port", type=int, default=8081, help="Port to bind"
+        "--port", type=int, default=20000, help="Port to bind"
     )
     server_parser.add_argument(
         "--reload", action="store_true", help="Enable auto-reload"
@@ -1268,7 +1268,7 @@ def main():
         # Default: start server
         console.print(Panel.fit(
             "[bold blue]RealtyAssistant AI Agent[/bold blue]\n"
-            "[dim]Starting server on 0.0.0.0:8081[/dim]\n\n"
+            "[dim]Starting server on 0.0.0.0:20000[/dim]\n\n"
             "[yellow]Usage:[/yellow]\n"
             "  python main.py serve    - Start API server\n"
             "  python main.py cli      - Interactive CLI\n"
@@ -1279,7 +1279,7 @@ def main():
         uvicorn.run(
             "main:app",
             host=os.getenv("HOST", "0.0.0.0"),
-            port=int(os.getenv("PORT", "8081")),
+            port=int(os.getenv("PORT", "20000")),
             reload=os.getenv("DEBUG", "false").lower() == "true"
         )
 
