@@ -111,11 +111,16 @@ class VoiceHandler:
                'not interested', 'nahi', 'na', 'mat karo', 'baad mein']
     }
     
-    # Conversation flow - mirrors chat widget
+    # Conversation flow - mirrors chat widget with natural intro
     CONVERSATION_FLOW = {
         'greeting': {
             'question': "Hello! This is RealtyAssistant calling. Am I speaking with {name}?",
             'field': 'name_confirmed',
+            'next': 'interest_check'
+        },
+        'interest_check': {
+            'question': "Are you currently interested in purchasing or renting a property?",
+            'field': 'interested',
             'next': 'location'
         },
         'location': {
@@ -165,9 +170,10 @@ class VoiceHandler:
         }
     }
     
-    def __init__(self, llm_engine=None):
-        """Initialize voice handler with optional LLM engine for fallback."""
+    def __init__(self, llm_engine=None, property_searcher=None):
+        """Initialize voice handler with engines."""
         self.llm_engine = llm_engine
+        self.property_searcher = property_searcher
         self.sessions: Dict[str, VoiceSession] = {}
         
         # Build reverse lookup for faster matching
@@ -463,6 +469,86 @@ class VoiceHandler:
             self.sessions[session_id] = VoiceSession(session_id=session_id)
         return self.sessions[session_id]
     
+    async def _enhance_with_llm(self, session: VoiceSession, user_input: str, base_response: str, context: str = "") -> str:
+        """
+        Optionally enhance response using LLM for more natural conversation.
+        
+        Falls back to base_response if LLM is unavailable or fails.
+        """
+        if not self.llm_engine:
+            return base_response
+        
+        try:
+            # Build conversation context
+            history = session.conversation_history[-4:] if session.conversation_history else []
+            history_text = "\n".join([f"{h['role']}: {h['content']}" for h in history])
+            
+            prompt = f"""You are a friendly real estate assistant on a phone call. 
+Make this response sound more natural and human-like for a voice call.
+Keep it short (1-2 sentences max) and conversational.
+
+Context: {context}
+Conversation so far:
+{history_text}
+User just said: "{user_input}"
+
+Base response to deliver: {base_response}
+
+Rewrite this naturally (keep the same meaning, just make it sound more human):"""
+
+            enhanced = await self.llm_engine.generate(prompt, max_tokens=100)
+            
+            if enhanced and len(enhanced) > 10:
+                return enhanced.strip()
+            return base_response
+            
+        except Exception as e:
+            logger.debug(f"LLM enhancement failed: {e}")
+            return base_response
+    
+    async def _interpret_unclear_input(self, session: VoiceSession, user_input: str, expected_type: str) -> str:
+        """
+        Use LLM to interpret unclear or garbled input.
+        
+        Args:
+            session: Current voice session
+            user_input: The unclear transcription
+            expected_type: What we expected (e.g., "city name", "yes or no", "number of bedrooms")
+            
+        Returns:
+            Interpreted value or None if can't interpret
+        """
+        if not self.llm_engine:
+            return None
+        
+        try:
+            prompt = f"""You are helping interpret a voice transcription from a phone call.
+The transcription might have accents or mispronunciations.
+
+Expected type of answer: {expected_type}
+Transcription: "{user_input}"
+
+What did the user most likely mean? Give just the interpreted value, nothing else.
+If you can't determine, say "UNCLEAR".
+
+Examples:
+- "noyda" for city → Noida
+- "too bhk" for bedrooms → 2 BHK
+- "yess please" for yes/no → yes
+
+Your interpretation:"""
+
+            result = await self.llm_engine.generate(prompt, max_tokens=50)
+            
+            if result and "UNCLEAR" not in result.upper():
+                return result.strip()
+            return None
+            
+        except Exception as e:
+            logger.debug(f"LLM interpretation failed: {e}")
+            return None
+
+    
     async def process_speech(
         self,
         session_id: str,
@@ -525,14 +611,16 @@ class VoiceHandler:
         # Handle each stage
         if stage == 'greeting':
             return self._handle_greeting(session, speech)
+        elif stage == 'interest_check':
+            return self._handle_interest_check(session, speech)
         elif stage == 'location':
-            return self._handle_location(session, speech)
+            return await self._handle_location(session, speech)
         elif stage == 'property_category':
             return self._handle_category(session, speech)
         elif stage == 'property_type':
-            return self._handle_property_type(session, speech)
+            return await self._handle_property_type(session, speech)
         elif stage == 'bedroom':
-            return self._handle_bedroom(session, speech)
+            return await self._handle_bedroom(session, speech)
         elif stage == 'search_complete':
             return self._handle_consent(session, speech)
         elif stage == 'budget':
@@ -545,39 +633,216 @@ class VoiceHandler:
             return self._handle_thank_you(session)
         else:
             return self._create_error_response(session)
-    
-    def _handle_greeting(self, session: VoiceSession, speech: str) -> VoiceResponse:
-        """Handle greeting stage - confirm identity."""
-        name = session.collected_data.get('name', 'there')
+
+    async def _perform_search_and_format(self, session: VoiceSession) -> str:
+        """Perform search and format results for speech."""
+        if not self.property_searcher:
+            return "I have noted your requirements. Would you like our property expert to call you with personalized recommendations?"
+
+        location = session.collected_data.get('location', '')
+        category = session.collected_data.get('property_category', '')
+        p_type = session.collected_data.get('property_type', '')
+        bedroom = session.collected_data.get('bedroom', '')
         
-        # Check for affirmative response
+        # Map category to 1 (Resi) or 4 (Comm) logic if needed, but searcher handles text
+        # Clean up bedroom for searcher (extract standard BHK)
+        topology = bedroom if bedroom else None
+        
+        logger.info(f"Voice Search: loc={location}, type={p_type}, bed={bedroom}")
+        
+        results = await self.property_searcher.search(
+            location=location,
+            property_type=category,
+            topology=topology
+        )
+        
+        if results.success and results.count > 0:
+            # Store results
+            session.collected_data['search_results'] = results.properties
+            
+            # Format speech
+            top_props = results.properties[:2] # Speak top 2
+            prop_names = ", ".join([p.get('title', 'Property') for p in top_props])
+            
+            speech = f"I found {results.count} properties in {location} matching your criteria. The top ones are {prop_names}. Would you like to talk to our expert for more details?"
+            return speech
+        else:
+            return f"I looked for properties in {location} but didn't find exact matches right now. However, I can have our expert find off-market deals for you. Would you like a call back?"
+
+    def _handle_greeting(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """
+        Handle greeting stage - confirm identity and introduce service.
+        
+        Flow:
+        1. Confirm if speaking with correct person
+        2. If no, ask for name and update
+        3. For new users, introduce RealtyAssistant
+        4. Ask if interested in purchasing property
+        """
+        name = session.collected_data.get('name', 'there')
+        is_name_confirmed = session.collected_data.get('name_confirmed', False)
+        awaiting_name = session.collected_data.get('awaiting_name', False)
+        introduced = session.collected_data.get('introduced', False)
+        
+        # If we're waiting for user's name after they said "no"
+        if awaiting_name:
+            # User provided their name
+            if speech and len(speech.strip()) > 1:
+                # Extract name from speech (could be "My name is John" or just "John")
+                name_text = speech.strip()
+                # Clean common prefixes
+                for prefix in ["my name is", "this is", "i am", "i'm", "call me"]:
+                    if name_text.lower().startswith(prefix):
+                        name_text = name_text[len(prefix):].strip()
+                
+                session.collected_data['name'] = name_text.title()
+                session.collected_data['awaiting_name'] = False
+                session.collected_data['name_confirmed'] = True
+                
+                # Introduce RealtyAssistant and ask about interest
+                intro = f"Nice to meet you, {name_text.title()}! "
+                intro += "I'm calling from RealtyAssistant. We help people find their perfect property - "
+                intro += "whether it's a dream home, an investment property, or commercial space. "
+                intro += "Are you currently looking to purchase or rent any property?"
+                
+                session.collected_data['introduced'] = True
+                
+                return VoiceResponse(
+                    message=intro,
+                    next_stage='interest_check',
+                    options=['Yes', 'No'],
+                    confidence=0.9
+                )
+            else:
+                return VoiceResponse(
+                    message="I didn't catch that. Could you please tell me your name?",
+                    next_stage='greeting',
+                    confidence=0.5
+                )
+        
+        # Check for affirmative/negative response
         consent, confidence = self._match_consent(speech)
         
         if consent is True or confidence > 0.5:
+            # User confirmed their identity
             session.collected_data['name_confirmed'] = True
+            
+            if not introduced:
+                # First time - introduce RealtyAssistant
+                intro = f"Wonderful, {name}! I'm calling from RealtyAssistant. "
+                intro += "We specialize in helping people find their ideal property across India. "
+                intro += "Are you currently interested in purchasing or renting a property?"
+                
+                session.collected_data['introduced'] = True
+                
+                return VoiceResponse(
+                    message=intro,
+                    next_stage='interest_check',
+                    options=['Yes, I am', 'Not right now'],
+                    confidence=confidence
+                )
+            else:
+                # Already introduced, proceed to location
+                return VoiceResponse(
+                    message=f"Great! Which city are you looking for property in?",
+                    next_stage='location',
+                    confidence=confidence
+                )
+                
+        elif consent is False:
+            # Wrong person - ask for their actual name
+            session.collected_data['awaiting_name'] = True
             return VoiceResponse(
-                message=f"Great to speak with you, {name}! I'm calling to help you find the perfect property. Which city are you looking for property in?",
+                message="Oh, I apologize! May I know who I'm speaking with?",
+                next_stage='greeting',  # Stay on greeting to capture name
+                confidence=0.8
+            )
+        else:
+            # Unclear response - might be their name if we just asked
+            # Or they might have said something unrelated
+            if speech and len(speech.strip()) > 2:
+                # Could be their name or a greeting like "hello" "hi"
+                speech_lower = speech.lower().strip()
+                greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening']
+                
+                if any(g in speech_lower for g in greetings):
+                    # They greeted back - confirm name again
+                    return VoiceResponse(
+                        message=f"Hello! Am I speaking with {name}?",
+                        next_stage='greeting',
+                        options=['Yes', 'No'],
+                        confidence=0.7
+                    )
+                else:
+                    # Assume they said yes and continue
+                    session.collected_data['name_confirmed'] = True
+                    session.collected_data['introduced'] = True
+                    
+                    return VoiceResponse(
+                        message=f"Great! I'm from RealtyAssistant, and I'd love to help you find the perfect property. Which city are you looking in?",
+                        next_stage='location',
+                        confidence=0.6
+                    )
+            else:
+                # Very short/empty - ask again
+                return VoiceResponse(
+                    message=f"I didn't quite catch that. Am I speaking with {name}?",
+                    next_stage='greeting',
+                    options=['Yes', 'No'],
+                    confidence=0.5
+                )
+    
+    def _handle_interest_check(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """
+        Handle interest check stage - ask if user is interested in property.
+        
+        If yes: proceed to location
+        If no: end call politely
+        """
+        consent, confidence = self._match_consent(speech)
+        
+        if consent is True:
+            session.collected_data['interested'] = True
+            name = session.collected_data.get('name', 'there')
+            return VoiceResponse(
+                message=f"Excellent, {name}! I'd love to help you find the perfect property. Which city are you looking in?",
                 next_stage='location',
+                options=['Noida', 'Mumbai', 'Delhi', 'Bangalore', 'Pune'],
                 confidence=confidence
             )
         elif consent is False:
-            # They said no - might be wrong person
+            session.collected_data['interested'] = False
+            name = session.collected_data.get('name', 'there')
             return VoiceResponse(
-                message="I apologize for the confusion. Could you please tell me your name?",
-                next_stage='greeting',  # Stay on greeting
-                confidence=0.7
+                message=f"No worries, {name}! I completely understand. If you ever need help finding a property, feel free to reach out to RealtyAssistant. We're here to help. Have a wonderful day!",
+                next_stage='thank_you',
+                is_complete=True,
+                collected_data=session.collected_data,
+                confidence=confidence
             )
         else:
-            # Assume they confirmed and continue
-            session.collected_data['name_confirmed'] = True
-            return VoiceResponse(
-                message=f"I'll help you find the perfect property. Which city are you looking for property in?",
-                next_stage='location',
-                confidence=0.6
-            )
+            # Unclear - check for property-related keywords that indicate interest
+            speech_lower = speech.lower() if speech else ""
+            interest_keywords = ['looking', 'searching', 'want', 'need', 'buy', 'rent', 'property', 'flat', 'apartment', 'house', 'villa']
+            
+            if any(kw in speech_lower for kw in interest_keywords):
+                session.collected_data['interested'] = True
+                return VoiceResponse(
+                    message="Great! Which city are you interested in?",
+                    next_stage='location',
+                    confidence=0.6
+                )
+            else:
+                # Ask again
+                return VoiceResponse(
+                    message="I just wanted to check - are you currently looking for a property to buy or rent?",
+                    next_stage='interest_check',
+                    options=['Yes', 'No'],
+                    confidence=0.5
+                )
     
-    def _handle_location(self, session: VoiceSession, speech: str) -> VoiceResponse:
-        """Handle location stage with fuzzy city matching."""
+    async def _handle_location(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """Handle location stage with fuzzy city matching and LLM fallback."""
         city, confidence = self._match_city(speech)
         
         if city and confidence >= 0.6:
@@ -589,6 +854,35 @@ class VoiceHandler:
                 confidence=confidence
             )
         else:
+            # Try LLM interpretation for unclear city names
+            interpreted = await self._interpret_unclear_input(
+                session,
+                speech,
+                "Indian city name (e.g., Noida, Mumbai, Delhi, Bangalore, Pune, Gurugram, Lucknow)"
+            )
+            
+            if interpreted:
+                # Re-match with the interpreted value
+                city, confidence = self._match_city(interpreted)
+                if city and confidence >= 0.5:
+                    session.collected_data['location'] = city
+                    logger.info(f"LLM interpreted '{speech}' as '{city}'")
+                    return VoiceResponse(
+                        message=f"Got it! {city} it is. Are you looking for a Residential or Commercial property?",
+                        next_stage='property_category',
+                        options=['Residential', 'Commercial'],
+                        confidence=0.7
+                    )
+                else:
+                    # Use interpreted value directly
+                    session.collected_data['location'] = interpreted.title()
+                    return VoiceResponse(
+                        message=f"I'll search for properties in {interpreted}. Are you looking for Residential or Commercial?",
+                        next_stage='property_category',
+                        options=['Residential', 'Commercial'],
+                        confidence=0.6
+                    )
+            
             session.retry_count += 1
             if session.retry_count > session.max_retries:
                 # Use what they said as-is
@@ -644,7 +938,7 @@ class VoiceHandler:
                 confidence=0.3
             )
     
-    def _handle_property_type(self, session: VoiceSession, speech: str) -> VoiceResponse:
+    async def _handle_property_type(self, session: VoiceSession, speech: str) -> VoiceResponse:
         """Handle property type selection."""
         category = session.collected_data.get('property_category', 'Residential Properties')
         ptype, confidence = self._match_property_type(speech, category)
@@ -652,8 +946,11 @@ class VoiceHandler:
         session.collected_data['property_type'] = ptype
         
         if 'commercial' in category.lower():
+            # Commercial flow ends here -> Search
+            search_speech = await self._perform_search_and_format(session)
+            
             return VoiceResponse(
-                message=f"Got it, {ptype}! Now searching for matching properties. Would you like our expert to call you with personalized recommendations?",
+                message=search_speech,
                 next_stage='search_complete',
                 options=['Yes', 'No'],
                 confidence=confidence
@@ -666,22 +963,41 @@ class VoiceHandler:
                 confidence=confidence
             )
     
-    def _handle_bedroom(self, session: VoiceSession, speech: str) -> VoiceResponse:
-        """Handle bedroom selection."""
+    async def _handle_bedroom(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """Handle bedroom selection with LLM fallback for unclear transcriptions."""
         bedroom, confidence = self._match_bedroom(speech)
         
         if bedroom and confidence >= 0.5:
             session.collected_data['bedroom'] = bedroom
         else:
-            # Default to what they said or 2 BHK
-            session.collected_data['bedroom'] = '2 BHK'
-            confidence = 0.5
+            # Try LLM interpretation for unclear speech (e.g., "3B edge game" -> "3 BHK")
+            interpreted = await self._interpret_unclear_input(
+                session, 
+                speech, 
+                "number of bedrooms (like 1 BHK, 2 BHK, 3 BHK, 4 BHK)"
+            )
+            
+            if interpreted:
+                # Try to extract BHK from LLM response
+                bhk_match = re.search(r'(\d+)\s*(?:bhk|bk|bedroom)?', interpreted.lower())
+                if bhk_match:
+                    bedroom = f"{bhk_match.group(1)} BHK"
+                    session.collected_data['bedroom'] = bedroom
+                    confidence = 0.7
+                    logger.info(f"LLM interpreted '{speech}' as '{bedroom}'")
+                else:
+                    session.collected_data['bedroom'] = '2 BHK'
+                    confidence = 0.5
+            else:
+                # Default to 2 BHK if can't determine
+                session.collected_data['bedroom'] = '2 BHK'
+                confidence = 0.5
         
-        location = session.collected_data.get('location', 'your area')
-        bedroom_display = session.collected_data.get('bedroom', '2 BHK')
+        # Residential flow ends here -> Search
+        search_speech = await self._perform_search_and_format(session)
         
         return VoiceResponse(
-            message=f"Perfect! {bedroom_display} in {location}. I'm searching for matching properties now. Would you like our property expert to call you with personalized recommendations?",
+            message=search_speech,
             next_stage='search_complete',
             options=['Yes, call me', 'No thanks'],
             confidence=confidence
@@ -730,14 +1046,29 @@ class VoiceHandler:
         )
     
     def _handle_email(self, session: VoiceSession, speech: str) -> VoiceResponse:
-        """Handle email input."""
+        """Handle email input and complete the call."""
         email = self._extract_email(speech)
         session.collected_data['email'] = email
         
+        # Get the completion message directly
+        name = session.collected_data.get('name', 'there')
+        location = session.collected_data.get('location', 'your preferred area')
+        phone = session.collected_data.get('phone', 'your number')
+        bedroom = session.collected_data.get('bedroom', '')
+        property_type = session.collected_data.get('property_type', '')
+        
+        # Create a natural, personalized farewell
+        farewell = f"Thank you so much, {name}! I've saved all your preferences. "
+        farewell += f"You're looking for a {bedroom} {property_type} in {location}. "
+        farewell += f"Our property expert will call you shortly at {phone} with personalized recommendations. "
+        farewell += "Have a wonderful day!"
+        
         return VoiceResponse(
-            message="",  # Will be filled in complete handler
+            message=farewell,
             next_stage='complete',
-            confidence=0.8
+            is_complete=True,
+            collected_data=session.collected_data,
+            confidence=0.95
         )
     
     def _handle_complete(self, session: VoiceSession) -> VoiceResponse:
@@ -787,11 +1118,11 @@ class VoiceHandler:
 _voice_handler: Optional[VoiceHandler] = None
 
 
-def get_voice_handler(llm_engine=None) -> VoiceHandler:
+def get_voice_handler(llm_engine=None, property_searcher=None) -> VoiceHandler:
     """Get or create singleton VoiceHandler instance."""
     global _voice_handler
     
     if _voice_handler is None:
-        _voice_handler = VoiceHandler(llm_engine=llm_engine)
+        _voice_handler = VoiceHandler(llm_engine=llm_engine, property_searcher=property_searcher)
     
     return _voice_handler

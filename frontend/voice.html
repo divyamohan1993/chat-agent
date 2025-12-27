@@ -171,7 +171,7 @@
             width: 120px;
             height: 120px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            background: linear-gradient(135deg, #325998 0%, #984275 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -426,11 +426,11 @@
         }
 
         .history-item.user {
-            border-left: 3px solid #6366f1;
+            border-left: 3px solid #325998;
         }
 
         .history-item.bot {
-            border-left: 3px solid #a855f7;
+            border-left: 3px solid #984275;
         }
 
         /* Status Toast for Errors/Info */
@@ -644,19 +644,14 @@
             const btn = document.querySelector('button[onclick="toggleMute()"]');
 
             if (isMuted) {
-                // Muted state
                 btn.style.background = 'white';
                 btn.style.color = '#1e293b';
-
-                uiApiStatus.textContent = 'Voice Inactive';
-                uiApiStatus.style.color = '#ef4444'; // Red
+                stopRecording(); // Stop loop if muted
             } else {
-                // Unmuted state
                 btn.style.background = 'rgba(255, 255, 255, 0.1)';
                 btn.style.color = 'white';
-
-                uiApiStatus.textContent = 'Voice Active';
-                uiApiStatus.style.color = '#4ade80'; // Green
+                // User unmuted - start listening if we are in a session
+                if (sessionId) startRecording();
             }
         }
 
@@ -667,9 +662,8 @@
         }
     </script>
 
-    <!-- Original Logic Preserved -->
+    <!-- Advanced Voice Logic with VAD and Whisper -->
     <script>
-        // Configuration
         const API_URL = '.';
 
         // UI References
@@ -677,57 +671,52 @@
         const uiLabel = document.getElementById('speakerLabel');
         const uiVisualizer = document.getElementById('visualizerArea');
         const uiApiStatus = document.getElementById('apiStatusDisplay');
+        const voiceBtn = document.getElementById('voiceButton');
 
         // State
         let isRecording = false;
+        let isProcessing = false;
+        let isSpeaking = false;
         let mediaRecorder = null;
         let audioChunks = [];
-        let conversationHistory = [];
         let sessionId = null;
         let leadName = 'Customer';
-        let currentStage = 'init';
+
+        // VAD State
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let vadInterval = null;
+        const VAD_THRESHOLD = 15; // Volume threshold
+        const SILENCE_DURATION = 1500; // ms to wait before stopping
+        let lastSpeechTime = Date.now();
+        let speechDetected = false;
+
+        // Configuration
+        const USE_WHISPER = true; // Use backend Whisper
 
         // Generate session ID
         function generateSessionId() {
             return 'voice-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
 
-        // Check API status on load
-        checkApiStatus();
-        setInterval(checkApiStatus, 30000);
-
-        async function checkApiStatus() {
-            try {
-                const response = await fetch(`${API_URL}/api/status`);
-                if (response.ok) {
-                    uiApiStatus.textContent = 'Voice Active';
-                    uiApiStatus.style.color = '#4ade80';
-                } else {
-                    throw new Error('Server error');
-                }
-            } catch (error) {
-                uiApiStatus.textContent = 'Demo Mode (Offline)';
-                uiApiStatus.style.color = '#f59e0b';
+        // Initialize VAD Audio Context
+        async function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
-        }
-
-        function updateDisplay(speaker, text) {
-            uiLabel.textContent = speaker;
-            uiMessage.textContent = text;
-
-            // Pulse effect if AI is speaking
-            if (speaker === 'Resha AI') {
-                uiVisualizer.classList.add('pulsing');
-                setTimeout(() => uiVisualizer.classList.remove('pulsing'), 3000); // Stop pulsing after a bit
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
             }
         }
 
         // Start a new voice session
         async function startVoiceSession() {
+            await initAudio();
             sessionId = generateSessionId();
             leadName = prompt('Enter your name (or press Enter for "Customer"):', 'Customer') || 'Customer';
 
-            startTimer(); // Start the call timer visually
+            startTimer();
 
             try {
                 const response = await fetch(`${API_URL}/api/voice/start`, {
@@ -742,11 +731,13 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    currentStage = data.stage;
 
-                    // Show and speak the greeting
                     updateDisplay('Resha AI', data.message);
-                    speakText(data.speak);
+                    addToHistory('assistant', data.message);
+                    // Play greeting and auto-start recording after
+                    playResponse(data.speak || data.message, null, () => {
+                        if (sessionId) setTimeout(() => startRecording(), 300);
+                    });
 
                     return true;
                 }
@@ -754,221 +745,268 @@
                 console.error('Failed to start session:', error);
                 updateDisplay('System', 'Failed to connect to voice server.');
             }
-
             return false;
         }
 
+        // Main Toggle Function
         async function toggleRecording() {
-            const button = document.getElementById('voiceButton');
-
-            // If no session, start one first
             if (!sessionId) {
-                const started = await startVoiceSession();
-                if (!started) return;
-                return; // Wait for user to read/listen then click again to speak
-            }
-
-            if (isRecording) {
-                // Stop recording
-                isRecording = false;
-                button.classList.remove('recording');
-                uiLabel.textContent = 'System';
-                uiMessage.textContent = 'Processing your audio...';
-
-                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                    mediaRecorder.stop();
-                }
-            } else {
-                // Start recording
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-
-                    mediaRecorder.ondataavailable = (event) => {
-                        audioChunks.push(event.data);
-                    };
-
-                    mediaRecorder.onstop = async () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        await processAudio(audioBlob);
-                        stream.getTracks().forEach(track => track.stop());
-                    };
-
-                    mediaRecorder.start();
-                    isRecording = true;
-                    button.classList.add('recording');
-
-                    updateDisplay('You', 'Listening...');
-
-                } catch (error) {
-                    console.error('Microphone error:', error);
-                    updateDisplay('System', 'Microphone access denied.');
-                }
-            }
-        }
-
-        async function processAudio(audioBlob) {
-            updateDisplay('System', 'Transcribing...');
-
-            let speechText = '';
-
-            // Try to use Web Speech API for transcription (browser-based)
-            try {
-                speechText = await transcribeWithWebSpeech();
-            } catch (error) {
-                console.log('Web Speech API not available, using demo mode');
-                speechText = prompt('Speech recognition unavailable. Please type your response:', '') || '';
-            }
-
-            if (!speechText) {
-                updateDisplay('System', 'No speech detected. Try again.');
+                await startVoiceSession();
                 return;
             }
 
-            addToHistory('user', speechText);
-            updateDisplay('You', speechText);
-
-            // Process with voice API
-            await processWithVoiceAPI(speechText);
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
         }
 
-        // Transcribe using Web Speech API
-        function transcribeWithWebSpeech() {
-            return new Promise((resolve, reject) => {
-                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                    reject(new Error('Speech recognition not supported'));
-                    return;
-                }
-
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                const recognition = new SpeechRecognition();
-
-                recognition.lang = 'en-IN';
-                recognition.interimResults = false;
-                recognition.maxAlternatives = 3;
-
-                recognition.onresult = (event) => {
-                    const result = event.results[0][0].transcript;
-                    resolve(result);
-                };
-
-                recognition.onerror = (event) => {
-                    reject(new Error(event.error));
-                };
-
-                // As established, this rejects immediately to trigger prompt, preserving original behavior
-                reject(new Error('Web Speech API requires real-time recording'));
-            });
-        }
-
-        async function processWithVoiceAPI(speechText) {
-            updateDisplay('Resha AI', 'Thinking...');
-            uiVisualizer.classList.add('pulsing'); // Fake thinking pulse
+        // Start Recording with VAD
+        async function startRecording() {
+            if (isRecording || isProcessing || isSpeaking || isMuted) return;
 
             try {
-                const response = await fetch(`${API_URL}/api/voice/process`, {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // Setup VAD
+                setupVAD(stream);
+
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    cleanupVAD();
+                    isRecording = false;
+                    voiceBtn.classList.remove('recording');
+
+                    if (speechDetected) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await processAudio(audioBlob);
+                    } else {
+                        // Resumed listening if no speech was detected (maybe just noise)
+                        // Or just go idle? Let's go idle to avoid loops.
+                        updateDisplay('System', 'No speech detected. click mic to speak.');
+                    }
+
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                speechDetected = false;
+                lastSpeechTime = Date.now();
+
+                voiceBtn.classList.add('recording');
+                updateDisplay('You', 'Listening... (Speak now)');
+                uiLabel.textContent = 'You';
+
+            } catch (error) {
+                console.error('Mic error:', error);
+                updateDisplay('System', 'Microphone access denied.');
+            }
+        }
+
+        // Stop Recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+
+        // VAD Setup
+        function setupVAD(stream) {
+            if (!audioContext) initAudio();
+
+            microphone = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            microphone.connect(analyser);
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            vadInterval = setInterval(() => {
+                analyser.getByteFrequencyData(dataArray);
+
+                // Calculate average volume
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / dataArray.length;
+
+                if (average > VAD_THRESHOLD) {
+                    lastSpeechTime = Date.now();
+                    if (!speechDetected) {
+                        speechDetected = true;
+                        console.log('Speech detected!');
+                        uiVisualizer.classList.add('pulsing');
+                    }
+                } else {
+                    uiVisualizer.classList.remove('pulsing');
+
+                    // Check for silence duration
+                    if (speechDetected && (Date.now() - lastSpeechTime > SILENCE_DURATION)) {
+                        console.log('Silence detected, stopping...');
+                        stopRecording();
+                    }
+                }
+            }, 100);
+        }
+
+        function cleanupVAD() {
+            clearInterval(vadInterval);
+            if (microphone) microphone.disconnect();
+            if (analyser) analyser.disconnect();
+            uiVisualizer.classList.remove('pulsing');
+        }
+
+        // Process Audio (Send to Whisper)
+        async function processAudio(audioBlob) {
+            if (!audioBlob || audioBlob.size === 0) {
+                console.warn('Empty audio blob, skipping.');
+                return;
+            }
+
+            isProcessing = true;
+            updateDisplay('System', 'Thinking...');
+
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'speech.webm');
+
+                // Encode Params
+                const safeSessionId = encodeURIComponent(sessionId);
+                const safeLeadName = encodeURIComponent(leadName);
+
+                const response = await fetch(`${API_URL}/api/voice/process-audio?session_id=${safeSessionId}&lead_name=${safeLeadName}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        speech_text: speechText,
-                        lead_name: leadName,
-                        lead_phone: ''
-                    })
+                    body: formData
                 });
 
                 if (response.ok) {
                     const data = await response.json();
 
-                    currentStage = data.stage;
+                    if (data.success) {
+                        updateDisplay('You', `"${data.transcription}"`);
+                        addToHistory('user', data.transcription);
 
-                    updateDisplay('Resha AI', data.message);
-                    addToHistory('bot', data.message);
+                        if (data.status === 'success' || data.success) {
+                            addToHistory('assistant', data.speak || data.message);
 
-                    // Speak the response
-                    speakText(data.speak);
+                            // Determine what to do after playback
+                            const onPlaybackComplete = () => {
+                                if (data.is_complete) {
+                                    console.log("Session complete.");
+                                    isRecording = false; // Ensure no auto-record
+                                    if (sessionId) {
+                                        // Optional: Call backend to end session explicitly if needed
+                                        sessionId = null;
+                                        stopTimer();
+                                        if (data.collected_data) showCollectedData(data.collected_data);
+                                        updateDisplay('Resha AI', 'Call Ended');
+                                    }
+                                } else {
+                                    // Continue conversation loop
+                                    if (sessionId) setTimeout(() => startRecording(), 300);
+                                }
+                            };
 
-                    // Handle completion
-                    if (data.is_complete) {
-                        updateDisplay('Resha AI', 'Conversation complete! ' + data.message);
-                        stopTimer();
+                            updateDisplay('Resha AI', data.speak || data.message);
+                            playResponse(data.speak || data.message, data.audio_base64, onPlaybackComplete);
 
-                        // Show collected data
-                        if (data.collected_data) {
-                            showCollectedData(data.collected_data);
+                        } else {
+                            updateDisplay('Resha AI', data.speak || "I couldn't understand.");
+                            playResponse(data.speak || "Please say that again.", null, () => startRecording());
                         }
-
-                        // Reset session for next call
-                        sessionId = null;
+                    } else {
+                        updateDisplay('Resha AI', data.speak || "I couldn't understand.");
+                        playResponse(data.speak || "Please say that again.", null, () => startRecording());
                     }
-
-                    return data;
                 } else {
-                    throw new Error('API error');
+                    throw new Error("Server Error");
                 }
             } catch (error) {
-                console.error('Voice API error:', error);
-                updateDisplay('System', 'Error processing request.');
-                uiVisualizer.classList.remove('pulsing');
-                return null;
+                console.error('Processing error:', error);
+                updateDisplay('System', 'Connection error.');
+                playResponse("I'm having trouble connecting. Please try again.", null, () => { }); // No auto-retry on error
+            } finally {
+                isProcessing = false;
             }
         }
 
-        function showCollectedData(data) {
-            const historyList = document.getElementById('historyList');
-
-            const item = document.createElement('div');
-            item.className = 'history-item bot';
-            item.style.borderLeft = '3px solid #667eea';
-            item.style.background = 'rgba(102, 126, 234, 0.1)';
-
-            item.innerHTML = `
-                <div style="font-weight:bold; margin-bottom:5px;">📋 Lead Summary</div>
-                <div>
-                    <strong>Name:</strong> ${data.name || 'N/A'}<br>
-                    <strong>Location:</strong> ${data.location || 'N/A'}<br>
-                    <strong>Property:</strong> ${data.property_category || ''} ${data.property_type || ''}<br>
-                    <strong>Bedroom:</strong> ${data.bedroom || 'N/A'}<br>
-                    <strong>Budget:</strong> ${data.budget || 'N/A'}<br>
-                    <strong>Consent:</strong> ${data.consent ? 'Yes' : 'No'}
-                </div>
-            `;
-
-            historyList.insertBefore(item, historyList.firstChild);
-            document.getElementById('historyDrawer').classList.add('open');
+        function updateDisplay(speaker, text) {
+            uiLabel.textContent = speaker;
+            uiMessage.textContent = text;
         }
 
-        function speakText(text) {
+        function playResponse(text, audioBase64, onComplete) {
+            if (!text && !audioBase64) {
+                if (onComplete) onComplete();
+                return;
+            }
+
+            isSpeaking = true;
             uiVisualizer.classList.add('pulsing');
 
+            const handleEnd = () => {
+                isSpeaking = false;
+                uiVisualizer.classList.remove('pulsing');
+                if (onComplete) onComplete();
+            };
+
+            if (audioBase64) {
+                console.log("Playing server audio...");
+                try {
+                    const audio = new Audio("data:audio/mp3;base64," + audioBase64);
+                    audio.onended = handleEnd;
+                    audio.onerror = (e) => {
+                        console.error("Audio playback error:", e);
+                        fallbackTTS(text, handleEnd);
+                    };
+                    audio.play().catch(e => {
+                        console.error("Audio autoplay failed:", e);
+                        fallbackTTS(text, handleEnd);
+                    });
+                } catch (e) {
+                    console.error("Audio setup error:", e);
+                    fallbackTTS(text, handleEnd);
+                }
+            } else {
+                fallbackTTS(text, handleEnd);
+            }
+        }
+
+        function fallbackTTS(text, onEnd) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
-
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 0.9;
-                utterance.pitch = 1;
-                utterance.lang = 'en-IN';
 
+                // Modern/Natural voice selection
                 const voices = window.speechSynthesis.getVoices();
-                const indianVoice = voices.find(v => v.lang.includes('en-IN') || v.name.includes('India'));
-                if (indianVoice) {
-                    utterance.voice = indianVoice;
-                }
+                const preferredVoice = voices.find(v =>
+                    v.name.includes('Google US English') ||
+                    v.name.includes('Samantha') ||
+                    (v.lang.includes('en') && v.name.includes('Female'))
+                );
 
-                utterance.onend = () => {
-                    uiVisualizer.classList.remove('pulsing');
-                };
-
+                if (preferredVoice) utterance.voice = preferredVoice;
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.onend = onEnd;
+                utterance.onerror = () => { onEnd(); };
                 window.speechSynthesis.speak(utterance);
             } else {
-                setTimeout(() => uiVisualizer.classList.remove('pulsing'), 2000);
+                // Fallback if no TTS
+                setTimeout(onEnd, 1000);
             }
         }
 
         function addToHistory(role, content) {
-            conversationHistory.push({ role, content });
-
             const historyList = document.getElementById('historyList');
             const item = document.createElement('div');
             item.className = `history-item ${role}`;
@@ -979,11 +1017,17 @@
             historyList.insertBefore(item, historyList.firstChild);
         }
 
-        // Load voices when available
+        function showCollectedData(data) {
+            // Same as before...
+            const historyList = document.getElementById('historyList');
+            const item = document.createElement('div');
+            item.innerHTML = `<center><b>Lead Captured</b><br>${data.name} - ${data.location}</center>`;
+            historyList.insertBefore(item, historyList.firstChild);
+        }
+
+        // Prep voices
         if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = () => {
-                console.log('Voices loaded:', window.speechSynthesis.getVoices().length);
-            };
+            window.speechSynthesis.onvoiceschanged = () => { };
         }
     </script>
 </body>

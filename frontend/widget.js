@@ -20,8 +20,8 @@
     // Configuration
     const DEFAULT_CONFIG = {
         apiUrl: '.', // Relative path for flexibility (supports subdirectories/proxies)
-        primaryColor: '#667eea',
-        secondaryColor: '#764ba2',
+        primaryColor: '#325998', // Brand Blue
+        secondaryColor: '#984275', // Brand Magenta
         position: 'bottom-right',
         greeting: "Hello! 👋 I'm your RealtyAssistant. I can help you find the perfect property. What's your name?",
         botName: 'RealtyAssistant',
@@ -1221,6 +1221,14 @@
 
         // Determine next stage
         let nextStage = currentStage.next;
+
+        // SKIP BEDROOM for Commercial properties
+        if (state.currentStage === 'property_type' && nextStage === 'bedroom') {
+            const category = state.collectedData.property_category?.toLowerCase() || '';
+            if (category.includes('commercial')) {
+                nextStage = 'search_and_show'; // Skip directly to search
+            }
+        }
 
         // Handle consent_after_search - route based on user's answer
         if (state.currentStage === 'consent_after_search') {

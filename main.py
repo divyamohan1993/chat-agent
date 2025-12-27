@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, File, UploadFile, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,6 +94,10 @@ async def lifespan(app: FastAPI):
     
     # Initialize engine
     await _llm_engine.initialize()
+    
+    # Initialize Voice Handler
+    from core.voice_handler import get_voice_handler
+    get_voice_handler(llm_engine=_llm_engine, property_searcher=_property_searcher)
     
     logger.info("RealtyAssistant AI Agent ready!")
     
@@ -998,6 +1002,109 @@ async def voice_get_session(session_id: str):
     }
 
 
+@app.post("/api/voice/process-audio")
+async def voice_process_audio(
+    request: Request,
+    session_id: str = Query(...),
+    lead_name: str = Query("Customer"),
+    audio: Optional[UploadFile] = File(None)
+):
+    """
+    Process voice audio using Whisper STT and return next response.
+    Modern replacement for process-speech.
+    """
+    from core.whisper_engine import get_whisper_engine
+    import shutil
+    import tempfile
+    
+    # Log request details for debugging
+    logger.info(f"Voice Request: session={session_id}, content_type={request.headers.get('content-type')}")
+    
+    if not audio:
+        logger.error("Audio file is missing in the request!")
+        # Try to read raw body to see what happened
+        body = await request.body()
+        logger.error(f"Raw body length: {len(body)}")
+        raise HTTPException(status_code=400, detail="Audio file missing or empty")
+
+    logger.info(f"Processing audio: filename={audio.filename}, content_type={audio.content_type}, size=unknown")
+    
+    # Save to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+        shutil.copyfileobj(audio.file, temp_audio)
+        temp_path = temp_audio.name
+    
+    try:
+        # Transcribe
+        whisper = get_whisper_engine()
+        if not whisper.is_available():
+             # Basic fallback if whisper not installed
+             speech_text = ""
+             logger.warning("Whisper not available")
+        else:
+             speech_text, confidence = whisper.transcribe_file(temp_path)
+             logger.info(f"Transcribed: '{speech_text}' (conf: {confidence:.2f})")
+        
+        # Clean up temp file
+        os.unlink(temp_path)
+        
+        # Process text
+        voice_handler = get_voice_handler()
+        response = await voice_handler.process_speech(
+            session_id=session_id,
+            speech_text=speech_text,
+            lead_name=lead_name,
+            lead_phone=""
+        )
+        
+        # Generate TTS Audio
+        audio_base64 = None
+        try:
+             from gtts import gTTS
+             import io
+             import base64
+             
+             # Use 'co.in' for Indian accent if available, or 'en'
+             tts = gTTS(text=response.message, lang='en', tld='co.in') 
+             mp3_fp = io.BytesIO()
+             tts.write_to_fp(mp3_fp)
+             mp3_fp.seek(0)
+             audio_base64 = base64.b64encode(mp3_fp.read()).decode('utf-8')
+        except Exception as e:
+             logger.error(f"TTS Error: {e}")
+        
+        result = {
+            "success": True,
+            "session_id": session_id,
+            "message": response.message,
+            "speak": response.message,
+            "audio_base64": audio_base64,
+            "stage": response.next_stage,
+            "options": response.options or [],
+            "confidence": response.confidence,
+            "is_complete": response.is_complete,
+            "transcription": speech_text
+        }
+        
+        if response.is_complete and response.collected_data:
+            result["collected_data"] = response.collected_data
+            await _save_voice_lead(session_id, response.collected_data)
+        
+        return result
+
+    except Exception as e:
+        logger.error(f"Audio processing error: {e}")
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+            
+        return {
+            "success": False,
+            "error": str(e),
+            "speak": "I encountered an error processing your voice. Please try again.",
+            "stage": "error"
+        }
+
+
 @app.delete("/api/voice/session/{session_id}")
 async def voice_end_session(session_id: str):
     """End and clear a voice session."""
@@ -1188,6 +1295,10 @@ async def run_simulation(
     )
     
     await _llm_engine.initialize()
+    
+    # Initialize Voice Handler with LLM
+    from core.voice_handler import get_voice_handler
+    get_voice_handler(llm_engine=_llm_engine)
     
     # Create lead
     lead = LeadInput(name=name, phone=phone, email=email)
