@@ -21,19 +21,28 @@
     const getDefaultApiUrl = () => {
         const hostname = window.location.hostname;
         const pathname = window.location.pathname;
+        const origin = window.location.origin;
 
-        // Local development - use origin directly
+        // Debug logging (can be removed in production)
+        console.log('RealtyAssistant Widget: Detecting API URL...', { hostname, pathname, origin });
+
+        // Local development - use origin directly (includes port)
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
-            return window.location.origin;
+            console.log('RealtyAssistant Widget: Local development mode, using', origin);
+            return origin;
         }
 
-        // Production: Check if we're under /task1/ path
-        if (pathname.startsWith('/task1')) {
-            return window.location.origin + '/task1';
+        // Production: Check if we're under any /task*/ path (e.g., /task1/, /task2/)
+        const taskMatch = pathname.match(/^(\/task\d+)/);
+        if (taskMatch) {
+            const apiUrl = origin + taskMatch[1];
+            console.log('RealtyAssistant Widget: Production mode with task path, using', apiUrl);
+            return apiUrl;
         }
 
-        // Default fallback - use relative path
-        return '.';
+        // Default fallback for production without task path - use origin
+        console.log('RealtyAssistant Widget: Production mode, using origin', origin);
+        return origin;
     };
 
     const DEFAULT_CONFIG = {
@@ -1240,10 +1249,11 @@
         // Determine next stage
         let nextStage = currentStage.next;
 
-        // SKIP BEDROOM for Commercial properties
+        // SKIP BEDROOM unless property_type is "Apartments" (Residential Apartments)
         if (state.currentStage === 'property_type' && nextStage === 'bedroom') {
-            const category = state.collectedData.property_category?.toLowerCase() || '';
-            if (category.includes('commercial')) {
+            const propertyType = state.collectedData.property_type?.toLowerCase() || '';
+            // Only ask bedroom question for Apartments
+            if (!propertyType.includes('apartments')) {
                 nextStage = 'search_and_show'; // Skip directly to search
             }
         }
