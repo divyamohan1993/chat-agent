@@ -19,7 +19,7 @@
 
     // Configuration
     const DEFAULT_CONFIG = {
-        apiUrl: 'http://localhost:20000',
+        apiUrl: '.', // Relative path for flexibility (supports subdirectories/proxies)
         primaryColor: '#667eea',
         secondaryColor: '#764ba2',
         position: 'bottom-right',
