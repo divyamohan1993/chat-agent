@@ -3,8 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Call - Resha AI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Voice Call - RealtyAssistant AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -17,52 +17,54 @@
         }
 
         :root {
-            --phone-width: 380px;
-            --phone-height: 780px;
+            --phone-width: min(380px, 95vw);
+            --phone-height: min(780px, 95vh);
             --phone-border-radius: 55px;
             --screen-border-radius: 45px;
+            --primary-color: #325998;
+            --secondary-color: #984275;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
         }
 
         body {
             font-family: 'Outfit', sans-serif;
-            background: #eef2f6;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #1e293b;
-            overflow: hidden;
         }
 
-        /* Phone Container (Desktop Defaults) */
+        /* Phone Container - Auto scaling */
         .phone-case {
             width: var(--phone-width);
             height: var(--phone-height);
             background: #111;
             border-radius: var(--phone-border-radius);
-            padding: 12px;
+            padding: 10px;
             box-shadow:
                 0 0 0 2px #333,
-                0 20px 50px rgba(0, 0, 0, 0.3),
+                0 20px 50px rgba(0, 0, 0, 0.5),
                 inset 0 0 0 2px rgba(255, 255, 255, 0.1);
             position: relative;
             z-index: 10;
-
-            /* Responsive Scaling for Desktop */
-            max-width: 95vw;
-            max-height: 95vh;
-            /* Maintain aspect ratio if screen is tight, or just let it shrink */
-            margin: auto;
+            transform-origin: center center;
         }
 
-        /* Power & Volume Buttons */
+        /* Power & Volume Buttons - scaled */
         .phone-case::before {
             content: '';
             position: absolute;
-            top: 200px;
-            right: -6px;
-            width: 6px;
-            height: 60px;
+            top: 25%;
+            right: -5px;
+            width: 5px;
+            height: 50px;
             background: #222;
             border-radius: 0 4px 4px 0;
         }
@@ -70,10 +72,10 @@
         .phone-case::after {
             content: '';
             position: absolute;
-            top: 160px;
-            left: -6px;
-            width: 6px;
-            height: 100px;
+            top: 20%;
+            left: -5px;
+            width: 5px;
+            height: 80px;
             background: #222;
             border-radius: 4px 0 0 4px;
         }
@@ -96,89 +98,243 @@
             top: 0;
             left: 50%;
             transform: translateX(-50%);
-            width: 120px;
-            height: 35px;
+            width: 100px;
+            height: 30px;
             background: #000;
-            border-bottom-left-radius: 20px;
-            border-bottom-right-radius: 20px;
+            border-bottom-left-radius: 18px;
+            border-bottom-right-radius: 18px;
             z-index: 20;
         }
 
         /* Status Bar */
         .status-bar {
-            padding: 15px 25px 0;
+            padding: 12px 20px 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            height: 50px;
+            height: 45px;
             z-index: 25;
         }
 
-        /* Main Call Interface */
+        /* ========== LOCK SCREEN ========== */
+        .lock-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.5s, visibility 0.5s;
+        }
+
+        .lock-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .lock-time {
+            font-size: 4rem;
+            font-weight: 300;
+            margin-bottom: 5px;
+        }
+
+        .lock-date {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 40px;
+        }
+
+        .lock-message {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 80px;
+        }
+
+        /* ========== INCOMING CALL SCREEN ========== */
+        .incoming-call-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #1e3a5f 0%, #0f172a 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 20px 40px;
+            z-index: 90;
+            transition: opacity 0.5s, visibility 0.5s;
+        }
+
+        .incoming-call-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .incoming-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .incoming-caller-name {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .incoming-caller-subtitle {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 30px;
+        }
+
+        .incoming-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            margin: 30px 0;
+            animation: incomingPulse 2s infinite;
+        }
+
+        @keyframes incomingPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 25px rgba(74, 222, 128, 0);
+            }
+        }
+
+        .incoming-actions {
+            display: flex;
+            gap: 60px;
+            margin-top: auto;
+            margin-bottom: 40px;
+        }
+
+        .incoming-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .incoming-btn:active {
+            transform: scale(0.9);
+        }
+
+        .btn-decline {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-answer {
+            background: #4ade80;
+            color: #14532d;
+            animation: answerPulse 1.5s infinite;
+        }
+
+        @keyframes answerPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        .incoming-btn-label {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* ========== ACTIVE CALL INTERFACE ========== */
         .call-interface {
             flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 40px 20px;
+            padding: 30px 15px 20px;
             justify-content: space-between;
         }
 
         .caller-info {
             text-align: center;
-            margin-top: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 100%;
+            margin-top: 10px;
         }
 
         .caller-status {
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 8px;
-            letter-spacing: 0.5px;
+            margin-bottom: 6px;
         }
 
         .caller-name {
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
 
         .caller-timer {
-            font-size: 1.1rem;
+            font-size: 1rem;
             color: rgba(255, 255, 255, 0.8);
             font-weight: 300;
             font-variant-numeric: tabular-nums;
         }
 
-        /* Avatar / Visualizer Area */
+        /* Avatar / Visualizer - Scaled */
         .visualizer-area {
             position: relative;
-            width: 200px;
-            height: 200px;
+            width: clamp(120px, 30vw, 160px);
+            height: clamp(120px, 30vw, 160px);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 20px 0;
+            margin: 15px 0;
             flex-shrink: 0;
         }
 
         .avatar-circle {
-            width: 120px;
-            height: 120px;
+            width: 80%;
+            height: 80%;
             border-radius: 50%;
-            background: linear-gradient(135deg, #325998 0%, #984275 100%);
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2.5rem;
+            font-size: clamp(1.5rem, 5vw, 2rem);
             position: relative;
             z-index: 2;
-            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
         }
 
         /* Pulsing Rings */
@@ -193,20 +349,20 @@
         }
 
         .pulsing .ring:nth-child(1) {
-            width: 140px;
-            height: 140px;
+            width: 90%;
+            height: 90%;
             animation: pulse 2s infinite;
         }
 
         .pulsing .ring:nth-child(2) {
-            width: 180px;
-            height: 180px;
+            width: 110%;
+            height: 110%;
             animation: pulse 2s infinite 0.4s;
         }
 
         .pulsing .ring:nth-child(3) {
-            width: 220px;
-            height: 220px;
+            width: 130%;
+            height: 130%;
             animation: pulse 2s infinite 0.8s;
         }
 
@@ -226,15 +382,15 @@
             }
         }
 
-        /* Live Transcription/Message Area */
+        /* Live Message Area - Scaled */
         .live-message-container {
             width: 100%;
-            min-height: 80px;
-            max-height: 120px;
+            min-height: 60px;
+            max-height: 100px;
             background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            padding: 15px;
-            margin-bottom: 20px;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 15px;
             backdrop-filter: blur(5px);
             overflow-y: auto;
             text-align: center;
@@ -244,41 +400,40 @@
         }
 
         .live-message {
-            font-size: 1rem;
+            font-size: clamp(0.8rem, 2.5vw, 0.95rem);
             line-height: 1.4;
             color: rgba(255, 255, 255, 0.9);
         }
 
         .message-label {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             text-transform: uppercase;
             color: rgba(255, 255, 255, 0.4);
             margin-bottom: 4px;
             display: block;
         }
 
-        /* Call Controls */
+        /* Call Controls - Auto-scaled */
         .controls-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+            gap: clamp(10px, 3vw, 20px);
             width: 100%;
-            padding: 0 10px;
-            margin-bottom: 30px;
+            padding: 0 5px;
+            margin-bottom: 15px;
         }
 
         .control-btn {
             background: rgba(255, 255, 255, 0.1);
             border: none;
             border-radius: 50%;
-            width: 65px;
-            height: 65px;
+            width: clamp(45px, 12vw, 55px);
+            height: clamp(45px, 12vw, 55px);
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.2rem;
+            font-size: clamp(0.9rem, 3vw, 1.1rem);
             margin: 0 auto;
             cursor: pointer;
             transition: all 0.2s;
@@ -294,41 +449,37 @@
         }
 
         .control-label {
-            font-size: 0.75rem;
-            margin-top: 8px;
-            font-weight: 400;
+            font-size: clamp(0.6rem, 2vw, 0.7rem);
+            margin-top: 6px;
+            text-align: center;
             color: rgba(255, 255, 255, 0.7);
         }
 
-        /* Main End/Record Button */
+        /* Main Action Buttons - Auto-scaled */
         .main-action-area {
             display: flex;
             justify-content: center;
+            gap: 25px;
             margin-top: auto;
-            margin-bottom: 20px;
+            padding-bottom: 10px;
         }
 
         .action-btn {
-            width: 75px;
-            height: 75px;
+            width: clamp(55px, 15vw, 65px);
+            height: clamp(55px, 15vw, 65px);
             border-radius: 50%;
             border: none;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.8rem;
+            font-size: clamp(1.2rem, 4vw, 1.5rem);
             cursor: pointer;
             transition: transform 0.2s;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .action-btn:active {
             transform: scale(0.95);
-        }
-
-        .btn-call {
-            background: #4ade80;
-            color: #14532d;
         }
 
         .btn-end {
@@ -348,34 +499,27 @@
         }
 
         @keyframes breathe {
-            0% {
+
+            0%,
+            100% {
                 box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3);
             }
 
             50% {
-                box-shadow: 0 0 0 15px rgba(255, 255, 255, 0.1);
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+                box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.1);
             }
         }
 
         /* Bottom pill */
         .home-indicator {
-            width: 140px;
-            height: 5px;
+            width: 100px;
+            height: 4px;
             background: rgba(255, 255, 255, 0.3);
             border-radius: 10px;
             position: absolute;
-            bottom: 8px;
+            bottom: 6px;
             left: 50%;
             transform: translateX(-50%);
-        }
-
-        /* Utilities */
-        .hidden {
-            display: none !important;
         }
 
         /* History Drawer */
@@ -384,13 +528,13 @@
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 70%;
+            height: 60%;
             background: #1e293b;
-            border-radius: 30px 30px 0 0;
+            border-radius: 25px 25px 0 0;
             transform: translateY(100%);
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            padding: 20px;
-            padding-top: 40px;
+            padding: 15px;
+            padding-top: 35px;
             z-index: 50;
         }
 
@@ -400,11 +544,11 @@
 
         .drawer-handle {
             position: absolute;
-            top: 15px;
+            top: 12px;
             left: 50%;
             transform: translateX(-50%);
-            width: 40px;
-            height: 5px;
+            width: 35px;
+            height: 4px;
             background: rgba(255, 255, 255, 0.2);
             border-radius: 10px;
             cursor: pointer;
@@ -415,52 +559,32 @@
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 10px;
         }
 
         .history-item {
-            padding: 12px;
+            padding: 10px;
             background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            font-size: 0.9rem;
+            border-radius: 10px;
+            font-size: 0.85rem;
         }
 
         .history-item.user {
-            border-left: 3px solid #325998;
+            border-left: 3px solid var(--primary-color);
         }
 
-        .history-item.bot {
-            border-left: 3px solid #984275;
+        .history-item.assistant {
+            border-left: 3px solid var(--secondary-color);
         }
 
-        /* Status Toast for Errors/Info */
-        .toast {
-            position: absolute;
-            top: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 60;
-            white-space: nowrap;
+        .hidden {
+            display: none !important;
         }
 
-        .toast.visible {
-            opacity: 1;
-        }
-
-        /* --- IMMERSIVE MODE & RESPONSIVENESS --- */
-
-        /* When screen width is small (phones) */
+        /* ========== MOBILE IMMERSIVE MODE ========== */
         @media (max-width: 480px) {
             body {
                 background: #000;
-                /* Phone bezel color match */
                 align-items: flex-start;
                 padding: 0;
             }
@@ -474,10 +598,8 @@
                 padding: 0;
                 background: transparent;
                 box-shadow: none;
-                border: none;
             }
 
-            /* Hide the decorative external buttons and notch simulation */
             .phone-case::before,
             .phone-case::after,
             .notch {
@@ -490,9 +612,37 @@
                 height: 100%;
             }
 
-            /* Status bar adjustment for real phones */
             .status-bar {
-                padding-top: 5px;
+                padding-top: env(safe-area-inset-top, 10px);
+            }
+
+            .home-indicator {
+                bottom: env(safe-area-inset-bottom, 8px);
+            }
+
+            .incoming-call-screen {
+                padding-top: 80px;
+            }
+        }
+
+        /* ========== TABLET/SMALL LAPTOP ========== */
+        @media (min-width: 481px) and (max-height: 700px) {
+            :root {
+                --phone-height: min(95vh, 650px);
+            }
+
+            .visualizer-area {
+                width: 100px;
+                height: 100px;
+            }
+
+            .call-interface {
+                padding: 20px 15px 15px;
+            }
+
+            .live-message-container {
+                min-height: 50px;
+                max-height: 80px;
             }
         }
     </style>
@@ -501,6 +651,39 @@
 <body>
     <div class="phone-case">
         <div class="phone-screen">
+            <!-- Lock Screen -->
+            <div class="lock-screen" id="lockScreen">
+                <div class="lock-time" id="lockTime">12:30</div>
+                <div class="lock-date" id="lockDate">Friday, December 27</div>
+                <div class="lock-message">Swipe up to unlock</div>
+            </div>
+
+            <!-- Incoming Call Screen -->
+            <div class="incoming-call-screen hidden" id="incomingCallScreen">
+                <div class="incoming-label">INCOMING CALL</div>
+                <div class="incoming-caller-name">RealtyAssistant AI</div>
+                <div class="incoming-caller-subtitle">Property Expert</div>
+
+                <div class="incoming-avatar">
+                    <i class="fas fa-home"></i>
+                </div>
+
+                <div class="incoming-actions">
+                    <div>
+                        <button class="incoming-btn btn-decline" onclick="declineCall()">
+                            <i class="fas fa-phone-slash"></i>
+                        </button>
+                        <div class="incoming-btn-label">Decline</div>
+                    </div>
+                    <div>
+                        <button class="incoming-btn btn-answer" onclick="answerCall()">
+                            <i class="fas fa-phone"></i>
+                        </button>
+                        <div class="incoming-btn-label">Answer</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Status Bar -->
             <div class="status-bar">
                 <span id="clockTime">12:30</span>
@@ -512,111 +695,189 @@
                 </div>
             </div>
 
-            <!-- Toast -->
-            <div class="toast" id="statusToast"></div>
-
-            <!-- Call Interface -->
-            <div class="call-interface">
+            <!-- Active Call Interface (initially hidden) -->
+            <div class="call-interface hidden" id="callInterface">
                 <div class="caller-info">
-                    <div class="caller-status" id="apiStatusDisplay">Connecting...</div>
-                    <div class="caller-name">Resha AI</div>
+                    <div class="caller-status" id="apiStatusDisplay">Connected</div>
+                    <div class="caller-name">RealtyAssistant AI</div>
                     <div class="caller-timer" id="callTimer">00:00</div>
                 </div>
 
-                <!-- Avatar visualizer -->
                 <div class="visualizer-area" id="visualizerArea">
                     <div class="ring"></div>
                     <div class="ring"></div>
                     <div class="ring"></div>
                     <div class="avatar-circle">
-                        <i class="fas fa-robot"></i>
+                        <i class="fas fa-headset"></i>
                     </div>
                 </div>
 
-                <!-- Live Captions (Replaces Transcript and Response styling) -->
                 <div class="live-message-container">
                     <div>
-                        <span class="message-label" id="speakerLabel">Waiting...</span>
+                        <span class="message-label" id="speakerLabel">Assistant</span>
                         <div id="displayMessage" class="live-message">
-                            Press the microphone button to start the conversation.
+                            Hello! How can I help you find your perfect property today?
                         </div>
                     </div>
                 </div>
 
-                <!-- Hidden original elements for logic preservation, mapped to new UI via JS if needed or just hidden -->
-                <div id="transcript" style="display:none;"></div>
-                <div id="responseText" style="display:none;"></div>
-                <div id="statusText" style="display:none;"></div>
-                <div id="statusHint" style="display:none;"></div>
-                <div id="apiStatus" style="display:none;"></div>
-                <div id="apiDot" style="display:none;"></div>
-                <div id="responseContainer" style="display:none;"></div>
-
-                <!-- Call Controls -->
                 <div class="controls-grid">
-                    <div class="control-box">
-                        <button class="control-btn" onclick="toggleMute()">
+                    <div>
+                        <button class="control-btn" id="muteBtn" onclick="toggleMute()">
                             <i class="fas fa-microphone-slash"></i>
                         </button>
                         <div class="control-label">Mute</div>
                     </div>
-                    <div class="control-box">
+                    <div>
                         <button class="control-btn" onclick="toggleHistory()">
                             <i class="fas fa-list-ul"></i>
                         </button>
                         <div class="control-label">History</div>
                     </div>
-                    <div class="control-box">
-                        <button class="control-btn">
+                    <div>
+                        <button class="control-btn" id="speakerBtn">
                             <i class="fas fa-volume-up"></i>
                         </button>
                         <div class="control-label">Speaker</div>
                     </div>
                 </div>
 
-                <!-- Main Action Button -->
                 <div class="main-action-area">
-                    <button class="action-btn btn-end" onclick="endCall()" style="margin-right: 20px;">
+                    <button class="action-btn btn-end" onclick="endCall()">
                         <i class="fas fa-phone-slash"></i>
                     </button>
-                    <!-- This button triggers the original toggleRecording logic -->
                     <button class="action-btn btn-mic" id="voiceButton" onclick="toggleRecording()">
-                        <i class="fas fa-microphone" id="micIconIcon"></i>
+                        <i class="fas fa-microphone" id="micIcon"></i>
                     </button>
                 </div>
             </div>
 
-            <!-- Bottom Home Indicator -->
             <div class="home-indicator"></div>
 
-            <!-- Slide-up History Drawer -->
+            <!-- History Drawer -->
             <div class="history-drawer" id="historyDrawer">
                 <div class="drawer-handle" onclick="toggleHistory()"></div>
-                <div style="font-size: 1.2rem; font-weight: 600; margin-bottom: 15px; text-align: center;">Conversation</div>
-                <div class="history-list" id="historyList">
-                    <!-- History gets prepended here -->
-                </div>
-                <!-- Original history container hidden but used for reference in script? 
-                     Script does: document.getElementById('historyContainer').classList.add('visible');
-                     So I need that ID. -->
-                <div id="historyContainer" style="display:none;"></div>
+                <div style="font-size: 1rem; font-weight: 600; margin-bottom: 12px; text-align: center;">Conversation</div>
+                <div class="history-list" id="historyList"></div>
             </div>
         </div>
     </div>
 
     <script>
-        // Update clock
+        const API_URL = '.';
+
+        // UI Elements
+        const lockScreen = document.getElementById('lockScreen');
+        const incomingScreen = document.getElementById('incomingCallScreen');
+        const callInterface = document.getElementById('callInterface');
+        const uiMessage = document.getElementById('displayMessage');
+        const uiLabel = document.getElementById('speakerLabel');
+        const uiVisualizer = document.getElementById('visualizerArea');
+        const voiceBtn = document.getElementById('voiceButton');
+
+        // State
+        let isRecording = false;
+        let isProcessing = false;
+        let isSpeaking = false;
+        let isMuted = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let sessionId = null;
+        let leadName = 'Customer';
+        let callState = 'locked'; // locked, incoming, active, ended
+
+        // VAD State
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let vadInterval = null;
+        const VAD_THRESHOLD = 15;
+        const SILENCE_DURATION = 1500;
+        let lastSpeechTime = Date.now();
+        let speechDetected = false;
+
+        // Timer
+        let timerInterval;
+        let seconds = 0;
+
+        // ========== CLOCK UPDATE ==========
         function updateClock() {
             const now = new Date();
             const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false });
             document.getElementById('clockTime').textContent = time;
+            document.getElementById('lockTime').textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false });
+
+            const options = { weekday: 'long', month: 'long', day: 'numeric' };
+            document.getElementById('lockDate').textContent = now.toLocaleDateString('en-US', options);
         }
         setInterval(updateClock, 1000);
         updateClock();
 
-        // Timer Logic
-        let timerInterval;
-        let seconds = 0;
+        // ========== SCREEN TRANSITIONS ==========
+        function showLockScreen() {
+            callState = 'locked';
+            lockScreen.classList.remove('hidden');
+            incomingScreen.classList.add('hidden');
+            callInterface.classList.add('hidden');
+        }
+
+        function showIncomingCall() {
+            callState = 'incoming';
+            lockScreen.classList.add('hidden');
+            incomingScreen.classList.remove('hidden');
+            callInterface.classList.add('hidden');
+
+            // Play ringtone effect (vibration on mobile)
+            if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200, 100, 200]);
+            }
+        }
+
+        function showActiveCall() {
+            callState = 'active';
+            lockScreen.classList.add('hidden');
+            incomingScreen.classList.add('hidden');
+            callInterface.classList.remove('hidden');
+        }
+
+        function showEndedCall() {
+            callState = 'ended';
+            stopTimer();
+            sessionId = null;
+
+            // Show brief "Call Ended" then lock screen
+            updateDisplay('System', 'Call Ended');
+            setTimeout(() => {
+                showLockScreen();
+            }, 2000);
+        }
+
+        // ========== CALL ACTIONS ==========
+
+        // Simulate incoming call after tap on lock screen
+        lockScreen.addEventListener('click', () => {
+            if (callState === 'locked') {
+                showIncomingCall();
+            }
+        });
+
+        function declineCall() {
+            showLockScreen();
+        }
+
+        async function answerCall() {
+            showActiveCall();
+            await startVoiceSession();
+        }
+
+        function endCall() {
+            if (callState === 'active') {
+                stopRecording();
+                showEndedCall();
+            }
+        }
+
+        // ========== TIMER ==========
         function startTimer() {
             stopTimer();
             seconds = 0;
@@ -627,80 +888,17 @@
                 document.getElementById('callTimer').textContent = `${mins}:${secs}`;
             }, 1000);
         }
+
         function stopTimer() {
             clearInterval(timerInterval);
             document.getElementById('callTimer').textContent = "00:00";
         }
 
-        // Toggle History Drawer
-        function toggleHistory() {
-            document.getElementById('historyDrawer').classList.toggle('open');
-        }
-
-        let isMuted = false;
-
-        function toggleMute() {
-            isMuted = !isMuted;
-            const btn = document.querySelector('button[onclick="toggleMute()"]');
-
-            if (isMuted) {
-                btn.style.background = 'white';
-                btn.style.color = '#1e293b';
-                stopRecording(); // Stop loop if muted
-            } else {
-                btn.style.background = 'rgba(255, 255, 255, 0.1)';
-                btn.style.color = 'white';
-                // User unmuted - start listening if we are in a session
-                if (sessionId) startRecording();
-            }
-        }
-
-        function endCall() {
-            if (confirm('End the current session?')) {
-                location.reload();
-            }
-        }
-    </script>
-
-    <!-- Advanced Voice Logic with VAD and Whisper -->
-    <script>
-        const API_URL = '.';
-
-        // UI References
-        const uiMessage = document.getElementById('displayMessage');
-        const uiLabel = document.getElementById('speakerLabel');
-        const uiVisualizer = document.getElementById('visualizerArea');
-        const uiApiStatus = document.getElementById('apiStatusDisplay');
-        const voiceBtn = document.getElementById('voiceButton');
-
-        // State
-        let isRecording = false;
-        let isProcessing = false;
-        let isSpeaking = false;
-        let mediaRecorder = null;
-        let audioChunks = [];
-        let sessionId = null;
-        let leadName = 'Customer';
-
-        // VAD State
-        let audioContext = null;
-        let analyser = null;
-        let microphone = null;
-        let vadInterval = null;
-        const VAD_THRESHOLD = 15; // Volume threshold
-        const SILENCE_DURATION = 1500; // ms to wait before stopping
-        let lastSpeechTime = Date.now();
-        let speechDetected = false;
-
-        // Configuration
-        const USE_WHISPER = true; // Use backend Whisper
-
-        // Generate session ID
+        // ========== VOICE SESSION ==========
         function generateSessionId() {
             return 'voice-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
 
-        // Initialize VAD Audio Context
         async function initAudio() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -710,12 +908,9 @@
             }
         }
 
-        // Start a new voice session
         async function startVoiceSession() {
             await initAudio();
             sessionId = generateSessionId();
-            leadName = prompt('Enter your name (or press Enter for "Customer"):', 'Customer') || 'Customer';
-
             startTimer();
 
             try {
@@ -731,29 +926,25 @@
 
                 if (response.ok) {
                     const data = await response.json();
-
-                    updateDisplay('Resha AI', data.message);
+                    updateDisplay('RealtyAssistant', data.message);
                     addToHistory('assistant', data.message);
-                    // Play greeting and auto-start recording after
                     playResponse(data.speak || data.message, null, () => {
-                        if (sessionId) setTimeout(() => startRecording(), 300);
+                        if (sessionId && callState === 'active') {
+                            setTimeout(() => startRecording(), 300);
+                        }
                     });
-
                     return true;
                 }
             } catch (error) {
                 console.error('Failed to start session:', error);
-                updateDisplay('System', 'Failed to connect to voice server.');
+                updateDisplay('System', 'Connection failed. Please try again.');
             }
             return false;
         }
 
-        // Main Toggle Function
+        // ========== RECORDING ==========
         async function toggleRecording() {
-            if (!sessionId) {
-                await startVoiceSession();
-                return;
-            }
+            if (callState !== 'active') return;
 
             if (isRecording) {
                 stopRecording();
@@ -762,14 +953,11 @@
             }
         }
 
-        // Start Recording with VAD
         async function startRecording() {
-            if (isRecording || isProcessing || isSpeaking || isMuted) return;
+            if (isRecording || isProcessing || isSpeaking || isMuted || callState !== 'active') return;
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-                // Setup VAD
                 setupVAD(stream);
 
                 mediaRecorder = new MediaRecorder(stream);
@@ -784,13 +972,11 @@
                     isRecording = false;
                     voiceBtn.classList.remove('recording');
 
-                    if (speechDetected) {
+                    if (speechDetected && callState === 'active') {
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         await processAudio(audioBlob);
-                    } else {
-                        // Resumed listening if no speech was detected (maybe just noise)
-                        // Or just go idle? Let's go idle to avoid loops.
-                        updateDisplay('System', 'No speech detected. click mic to speak.');
+                    } else if (callState === 'active') {
+                        updateDisplay('System', 'No speech detected. Tap mic to speak.');
                     }
 
                     stream.getTracks().forEach(track => track.stop());
@@ -802,8 +988,7 @@
                 lastSpeechTime = Date.now();
 
                 voiceBtn.classList.add('recording');
-                updateDisplay('You', 'Listening... (Speak now)');
-                uiLabel.textContent = 'You';
+                updateDisplay('You', 'Listening...');
 
             } catch (error) {
                 console.error('Mic error:', error);
@@ -811,14 +996,13 @@
             }
         }
 
-        // Stop Recording
         function stopRecording() {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
         }
 
-        // VAD Setup
+        // ========== VAD ==========
         function setupVAD(stream) {
             if (!audioContext) initAudio();
 
@@ -831,27 +1015,19 @@
 
             vadInterval = setInterval(() => {
                 analyser.getByteFrequencyData(dataArray);
-
-                // Calculate average volume
                 let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
                 const average = sum / dataArray.length;
 
                 if (average > VAD_THRESHOLD) {
                     lastSpeechTime = Date.now();
                     if (!speechDetected) {
                         speechDetected = true;
-                        console.log('Speech detected!');
                         uiVisualizer.classList.add('pulsing');
                     }
                 } else {
                     uiVisualizer.classList.remove('pulsing');
-
-                    // Check for silence duration
                     if (speechDetected && (Date.now() - lastSpeechTime > SILENCE_DURATION)) {
-                        console.log('Silence detected, stopping...');
                         stopRecording();
                     }
                 }
@@ -865,25 +1041,18 @@
             uiVisualizer.classList.remove('pulsing');
         }
 
-        // Process Audio (Send to Whisper)
+        // ========== AUDIO PROCESSING ==========
         async function processAudio(audioBlob) {
-            if (!audioBlob || audioBlob.size === 0) {
-                console.warn('Empty audio blob, skipping.');
-                return;
-            }
+            if (!audioBlob || audioBlob.size === 0 || callState !== 'active') return;
 
             isProcessing = true;
-            updateDisplay('System', 'Thinking...');
+            updateDisplay('System', 'Processing...');
 
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'speech.webm');
 
-                // Encode Params
-                const safeSessionId = encodeURIComponent(sessionId);
-                const safeLeadName = encodeURIComponent(leadName);
-
-                const response = await fetch(`${API_URL}/api/voice/process-audio?session_id=${safeSessionId}&lead_name=${safeLeadName}`, {
+                const response = await fetch(`${API_URL}/api/voice/process-audio?session_id=${encodeURIComponent(sessionId)}&lead_name=${encodeURIComponent(leadName)}`, {
                     method: 'POST',
                     body: formData
                 });
@@ -894,51 +1063,34 @@
                     if (data.success) {
                         updateDisplay('You', `"${data.transcription}"`);
                         addToHistory('user', data.transcription);
+                        addToHistory('assistant', data.speak || data.message);
 
-                        if (data.status === 'success' || data.success) {
-                            addToHistory('assistant', data.speak || data.message);
+                        const onPlaybackComplete = () => {
+                            if (data.is_complete) {
+                                showEndedCall();
+                            } else if (sessionId && callState === 'active') {
+                                setTimeout(() => startRecording(), 300);
+                            }
+                        };
 
-                            // Determine what to do after playback
-                            const onPlaybackComplete = () => {
-                                if (data.is_complete) {
-                                    console.log("Session complete.");
-                                    isRecording = false; // Ensure no auto-record
-                                    if (sessionId) {
-                                        // Optional: Call backend to end session explicitly if needed
-                                        sessionId = null;
-                                        stopTimer();
-                                        if (data.collected_data) showCollectedData(data.collected_data);
-                                        updateDisplay('Resha AI', 'Call Ended');
-                                    }
-                                } else {
-                                    // Continue conversation loop
-                                    if (sessionId) setTimeout(() => startRecording(), 300);
-                                }
-                            };
-
-                            updateDisplay('Resha AI', data.speak || data.message);
-                            playResponse(data.speak || data.message, data.audio_base64, onPlaybackComplete);
-
-                        } else {
-                            updateDisplay('Resha AI', data.speak || "I couldn't understand.");
-                            playResponse(data.speak || "Please say that again.", null, () => startRecording());
-                        }
+                        updateDisplay('RealtyAssistant', data.speak || data.message);
+                        playResponse(data.speak || data.message, data.audio_base64, onPlaybackComplete);
                     } else {
-                        updateDisplay('Resha AI', data.speak || "I couldn't understand.");
-                        playResponse(data.speak || "Please say that again.", null, () => startRecording());
+                        updateDisplay('RealtyAssistant', data.speak || "Please say that again.");
+                        playResponse(data.speak || "Please say that again.", null, () => {
+                            if (sessionId && callState === 'active') startRecording();
+                        });
                     }
-                } else {
-                    throw new Error("Server Error");
                 }
             } catch (error) {
                 console.error('Processing error:', error);
                 updateDisplay('System', 'Connection error.');
-                playResponse("I'm having trouble connecting. Please try again.", null, () => { }); // No auto-retry on error
             } finally {
                 isProcessing = false;
             }
         }
 
+        // ========== UI HELPERS ==========
         function updateDisplay(speaker, text) {
             uiLabel.textContent = speaker;
             uiMessage.textContent = text;
@@ -960,20 +1112,12 @@
             };
 
             if (audioBase64) {
-                console.log("Playing server audio...");
                 try {
                     const audio = new Audio("data:audio/mp3;base64," + audioBase64);
                     audio.onended = handleEnd;
-                    audio.onerror = (e) => {
-                        console.error("Audio playback error:", e);
-                        fallbackTTS(text, handleEnd);
-                    };
-                    audio.play().catch(e => {
-                        console.error("Audio autoplay failed:", e);
-                        fallbackTTS(text, handleEnd);
-                    });
+                    audio.onerror = () => fallbackTTS(text, handleEnd);
+                    audio.play().catch(() => fallbackTTS(text, handleEnd));
                 } catch (e) {
-                    console.error("Audio setup error:", e);
                     fallbackTTS(text, handleEnd);
                 }
             } else {
@@ -985,24 +1129,20 @@
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
-
-                // Modern/Natural voice selection
                 const voices = window.speechSynthesis.getVoices();
                 const preferredVoice = voices.find(v =>
                     v.name.includes('Google US English') ||
                     v.name.includes('Samantha') ||
                     (v.lang.includes('en') && v.name.includes('Female'))
                 );
-
                 if (preferredVoice) utterance.voice = preferredVoice;
                 utterance.rate = 1.0;
                 utterance.pitch = 1.0;
                 utterance.onend = onEnd;
-                utterance.onerror = () => { onEnd(); };
+                utterance.onerror = onEnd;
                 window.speechSynthesis.speak(utterance);
             } else {
-                // Fallback if no TTS
-                setTimeout(onEnd, 1000);
+                setTimeout(onEnd, 1500);
             }
         }
 
@@ -1011,21 +1151,29 @@
             const item = document.createElement('div');
             item.className = `history-item ${role}`;
             item.innerHTML = `
-                <div style="font-size:0.75rem; opacity:0.7; margin-bottom:4px;">${role === 'user' ? '👤 You' : '🏠 Resha AI'}</div>
+                <div style="font-size:0.7rem; opacity:0.7; margin-bottom:3px;">${role === 'user' ? '👤 You' : '🏠 Assistant'}</div>
                 <div>${content}</div>
             `;
             historyList.insertBefore(item, historyList.firstChild);
         }
 
-        function showCollectedData(data) {
-            // Same as before...
-            const historyList = document.getElementById('historyList');
-            const item = document.createElement('div');
-            item.innerHTML = `<center><b>Lead Captured</b><br>${data.name} - ${data.location}</center>`;
-            historyList.insertBefore(item, historyList.firstChild);
+        function toggleHistory() {
+            document.getElementById('historyDrawer').classList.toggle('open');
         }
 
-        // Prep voices
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btn = document.getElementById('muteBtn');
+            if (isMuted) {
+                btn.classList.add('active');
+                stopRecording();
+            } else {
+                btn.classList.remove('active');
+                if (sessionId && callState === 'active') startRecording();
+            }
+        }
+
+        // Init voices
         if ('speechSynthesis' in window) {
             window.speechSynthesis.onvoiceschanged = () => { };
         }
