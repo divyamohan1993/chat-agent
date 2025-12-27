@@ -103,9 +103,51 @@ sudo -u "$REAL_USER" "$VENV_DIR/bin/playwright" install chromium || echo "   War
 echo -e "${GREEN}   Playwright ready${NC}"
 
 # =============================================================================
-# STEP 5: Create Required Directories
+# STEP 5: Install Ollama & Pull Models
 # =============================================================================
-echo -e "${YELLOW}[5/10] Creating application directories...${NC}"
+echo -e "${YELLOW}[5/11] Setting up Ollama AI Engine...${NC}"
+
+# 1. Install Ollama if missing
+if ! command -v ollama &> /dev/null; then
+    echo "   Installing Ollama..."
+    curl -fsSL https://ollama.com/install.sh | sh
+else
+    echo -e "${GREEN}   Ollama already installed${NC}"
+fi
+
+# 2. Add user to ollama group if it exists (fixes permission issues)
+if getent group ollama > /dev/null; then
+    usermod -aG ollama "$REAL_USER"
+fi
+
+# 3. Ensure service is running
+if ! systemctl is-active --quiet ollama; then
+    echo "   Starting Ollama service..."
+    systemctl start ollama
+    sleep 5
+fi
+
+# 4. Pull the required model
+# Extract model name from .env if it exists, otherwise default
+MODEL_NAME="gemma2:2b" # Default fallback
+if [ -f "$PROJECT_DIR/.env" ]; then
+    # Try to grep model from .env
+    ENV_MODEL=$(grep "^OLLAMA_MODEL=" "$PROJECT_DIR/.env" | cut -d'=' -f2)
+    if [ ! -z "$ENV_MODEL" ]; then
+        MODEL_NAME="$ENV_MODEL"
+    fi
+fi
+
+echo "   Pulling LLM model: $MODEL_NAME..."
+# We run pull as the real user or root, it talks to the daemon
+ollama pull "$MODEL_NAME" || echo -e "${RED}   [WARNING] Failed to pull model $MODEL_NAME. You may need to run 'ollama pull $MODEL_NAME' manually.${NC}"
+
+echo -e "${GREEN}   Ollama setup complete${NC}"
+
+# =============================================================================
+# STEP 6: Create Required Directories
+# =============================================================================
+echo -e "${YELLOW}[6/11] Creating application directories...${NC}"
 
 mkdir -p "$PROJECT_DIR/data/logs"
 mkdir -p "$PROJECT_DIR/data/leads"
@@ -115,9 +157,9 @@ chown -R "$REAL_USER:$REAL_USER" "$PROJECT_DIR/data"
 echo -e "${GREEN}   Directories created${NC}"
 
 # =============================================================================
-# STEP 6: Create/Update .env Configuration
+# STEP 7: Create/Update .env Configuration
 # =============================================================================
-echo -e "${YELLOW}[6/10] Setting up environment configuration...${NC}"
+echo -e "${YELLOW}[7/11] Setting up environment configuration...${NC}"
 
 if [ ! -f "$PROJECT_DIR/.env" ]; then
     if [ -f "$PROJECT_DIR/.env.example" ]; then
@@ -134,18 +176,24 @@ LOGS_DIR=data/logs
 LEADS_DIR=data/leads
 HOST=127.0.0.1
 PORT=20000
+LOG_LEVEL=DEBUG
 ENVFILE
     fi
     chown "$REAL_USER:$REAL_USER" "$PROJECT_DIR/.env"
     echo -e "${GREEN}   Created .env configuration${NC}"
 else
     echo -e "${GREEN}   .env already exists${NC}"
+    # Ensure LOG_LEVEL is set
+    if ! grep -q "LOG_LEVEL" "$PROJECT_DIR/.env"; then
+        echo "LOG_LEVEL=DEBUG" >> "$PROJECT_DIR/.env"
+        echo -e "${YELLOW}   Added LOG_LEVEL=DEBUG to .env${NC}"
+    fi
 fi
 
 # =============================================================================
-# STEP 7: Create Startup Wrapper & Systemd Service
+# STEP 8: Create Startup Wrapper & Systemd Service
 # =============================================================================
-echo -e "${YELLOW}[7/10] Creating auto-update startup wrapper...${NC}"
+echo -e "${YELLOW}[8/11] Creating auto-update startup wrapper...${NC}"
 
 # Create a wrapper script that updates code/deps on boot
 WRAPPER_SCRIPT="$PROJECT_DIR/start_agent.sh"
@@ -206,9 +254,9 @@ systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" 2>/dev/null
 
 # =============================================================================
-# STEP 8: Configure Nginx
+# STEP 9: Configure Nginx
 # =============================================================================
-echo -e "${YELLOW}[8/10] Configuring Nginx...${NC}"
+echo -e "${YELLOW}[9/11] Configuring Nginx...${NC}"
 
 cat > "$NGINX_CONF" << NGINXEOF
 # RealtyAssistant AI Agent - Nginx Configuration
@@ -297,9 +345,9 @@ nginx -t 2>/dev/null || {
 echo -e "${GREEN}   Nginx configured${NC}"
 
 # =============================================================================
-# STEP 9: Start/Restart Services
+# STEP 10: Start/Restart Services
 # =============================================================================
-echo -e "${YELLOW}[9/10] Starting services...${NC}"
+echo -e "${YELLOW}[10/11] Starting services...${NC}"
 
 # Stop any existing instance
 systemctl stop "$SERVICE_NAME" 2>/dev/null || true
@@ -333,9 +381,9 @@ else
 fi
 
 # =============================================================================
-# STEP 10: Verify Deployment
+# STEP 11: Verify Deployment
 # =============================================================================
-echo -e "${YELLOW}[10/10] Verifying deployment...${NC}"
+echo -e "${YELLOW}[11/11] Verifying deployment...${NC}"
 
 # Test local endpoint
 if curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${APP_PORT}/" | grep -q "200"; then

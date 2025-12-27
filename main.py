@@ -44,7 +44,7 @@ from core import LLMEngine, PropertySearcher, WhisperEngine, GeminiFallback
 console = Console()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(message)s",
     datefmt="[%X]",
     handlers=[RichHandler(console=console, rich_tracebacks=True)]
