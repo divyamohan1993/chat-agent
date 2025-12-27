@@ -143,10 +143,20 @@ class VoiceHandler:
             'field': 'bedroom',
             'next': 'search_complete'
         },
+        'verify_requirements': {
+            'question': "Did I get your requirements right?",
+            'field': 'verified',
+            'next': 'search_complete'
+        },
         'search_complete': {
             'question': "Excellent! I'm searching for matching properties now. Would you like our property expert to call you with personalized recommendations?",
             'field': 'consent',
             'next': None  # Dynamic
+        },
+        'ask_name': {
+            'question': "By the way, may I know your good name so our expert knows who to ask for?",
+            'field': 'name',
+            'next': 'budget'
         },
         'budget': {
             'question': "What's your budget range for this property?",
@@ -548,6 +558,93 @@ Your interpretation:"""
             logger.debug(f"LLM interpretation failed: {e}")
             return None
 
+    async def _extract_requirements_from_speech(self, speech: str) -> Dict[str, Any]:
+        """
+        Extract all property requirements from natural speech using LLM.
+        
+        Handles statements like:
+        - "I'm looking for a 3 BHK apartment in Noida under 50 lakhs"
+        - "I want commercial space in Mumbai for my office"
+        - "Need a 2 bedroom flat in Bangalore, budget around 1 crore"
+        
+        Returns dict with extracted fields (may be partial):
+        - location, property_category, property_type, bedroom, budget, name
+        """
+        if not self.llm_engine or not speech or len(speech.strip()) < 5:
+            return {}
+        
+        try:
+            prompt = f"""Extract property search requirements from this customer statement.
+Return ONLY a JSON object with these fields (use null for missing info):
+
+Fields to extract:
+- location: City name in India (e.g., Noida, Mumbai, Delhi, Bangalore)
+- property_category: "Residential" or "Commercial"  
+- property_type: Apartment/Flat, Villa/House, Plot, Office, Shop, etc.
+- bedroom: Number of bedrooms (e.g., "2 BHK", "3 BHK")
+- budget: Budget amount (e.g., "50 Lakhs", "1 Crore", "80 Lakhs to 1 Crore")
+- name: Customer's name if they mentioned it
+- timeline: When they want to buy (e.g., "immediately", "3 months", "6 months")
+- purpose: "investment", "self-use", "rental", etc.
+
+Customer said: "{speech}"
+
+Return ONLY valid JSON, no other text:"""
+
+            result = await self.llm_engine.generate(prompt, max_tokens=200)
+            
+            if result:
+                # Clean up response - extract JSON
+                result = result.strip()
+                # Handle markdown code blocks
+                if "```json" in result:
+                    result = result.split("```json")[1].split("```")[0]
+                elif "```" in result:
+                    result = result.split("```")[1].split("```")[0]
+                
+                import json
+                try:
+                    extracted = json.loads(result.strip())
+                    # Clean null values
+                    return {k: v for k, v in extracted.items() if v is not None and v != "null" and v != ""}
+                except json.JSONDecodeError:
+                    logger.debug(f"Failed to parse LLM JSON: {result}")
+                    return {}
+            
+            return {}
+            
+        except Exception as e:
+            logger.debug(f"Requirement extraction failed: {e}")
+            return {}
+    
+    def _format_requirements_summary(self, data: Dict[str, Any]) -> str:
+        """Format extracted requirements into a natural confirmation message."""
+        parts = []
+        
+        if data.get('bedroom'):
+            parts.append(f"a {data['bedroom']}")
+        
+        if data.get('property_type'):
+            parts.append(data['property_type'].lower())
+        elif data.get('property_category'):
+            if 'commercial' in data['property_category'].lower():
+                parts.append("commercial property")
+            else:
+                parts.append("property")
+        
+        if data.get('location'):
+            parts.append(f"in {data['location']}")
+        
+        if data.get('budget'):
+            parts.append(f"with a budget of {data['budget']}")
+        
+        if data.get('purpose'):
+            parts.append(f"for {data['purpose']}")
+        
+        if parts:
+            return " ".join(parts)
+        return "a property"
+
     
     async def process_speech(
         self,
@@ -559,23 +656,18 @@ Your interpretation:"""
         """
         Process speech input and generate response.
         
-        Args:
-            session_id: Unique session identifier
-            speech_text: Transcribed speech from caller
-            lead_name: Name of the lead (from CRM/dialer)
-            lead_phone: Phone number of the lead
-            
-        Returns:
-            VoiceResponse with message and next stage
+        Features:
+        - Detects rich input with multiple requirements
+        - Extracts all info using LLM
+        - Jumps to verification if enough info collected
+        - Falls back to stage-by-stage flow for simple answers
         """
         session = self.get_session(session_id)
         speech_text = speech_text.strip() if speech_text else ""
         
         logger.info(f"[Voice] Session {session_id}, Stage: {session.current_stage}, Input: '{speech_text}'")
         
-        # Initialize name from lead info
-        if 'name' not in session.collected_data and lead_name:
-            session.collected_data['name'] = lead_name
+        # Initialize from lead info (but use generic until we know real name)
         if 'phone' not in session.collected_data and lead_phone:
             session.collected_data['phone'] = lead_phone
         
@@ -586,7 +678,53 @@ Your interpretation:"""
                 'content': speech_text
             })
         
-        # Process based on current stage
+        # Check if this is rich input with multiple requirements (longer than 15 words or has property keywords)
+        words = speech_text.lower().split() if speech_text else []
+        property_keywords = ['bhk', 'bedroom', 'flat', 'apartment', 'villa', 'house', 'plot', 
+                           'office', 'shop', 'lakh', 'crore', 'budget', 'noida', 'mumbai', 
+                           'delhi', 'bangalore', 'pune', 'gurugram', 'looking', 'want', 'need']
+        
+        has_property_keywords = sum(1 for kw in property_keywords if kw in speech_text.lower()) >= 2
+        is_rich_input = len(words) > 10 or has_property_keywords
+        
+        # Try to extract requirements from rich input
+        if is_rich_input and session.current_stage in ['interest_check', 'location', 'property_category', 'property_type', 'bedroom']:
+            extracted = await self._extract_requirements_from_speech(speech_text)
+            
+            if extracted and len(extracted) >= 2:
+                logger.info(f"Extracted requirements: {extracted}")
+                
+                # Store extracted data
+                for key in ['location', 'property_category', 'property_type', 'bedroom', 'budget', 'timeline', 'purpose']:
+                    if extracted.get(key):
+                        session.collected_data[key] = extracted[key]
+                
+                # If customer mentioned their name, use it
+                if extracted.get('name'):
+                    session.collected_data['name'] = extracted['name']
+                    session.collected_data['name_confirmed'] = True
+                
+                # Generate confirmation message
+                summary = self._format_requirements_summary(extracted)
+                session.collected_data['requirements_extracted'] = True
+                
+                # Move to verification stage
+                response = VoiceResponse(
+                    message=f"Got it! So you're looking for {summary}. Did I get that right?",
+                    next_stage='verify_requirements',
+                    options=['Yes', 'No, let me correct'],
+                    confidence=0.85
+                )
+                
+                session.conversation_history.append({
+                    'role': 'assistant',
+                    'content': response.message
+                })
+                session.current_stage = response.next_stage
+                
+                return response
+        
+        # Process based on current stage (normal flow)
         response = await self._process_stage(session, speech_text)
         
         # Add response to history
@@ -621,8 +759,12 @@ Your interpretation:"""
             return await self._handle_property_type(session, speech)
         elif stage == 'bedroom':
             return await self._handle_bedroom(session, speech)
+        elif stage == 'verify_requirements':
+            return await self._handle_verify_requirements(session, speech)
         elif stage == 'search_complete':
-            return self._handle_consent(session, speech)
+            return await self._handle_search_complete(session, speech)
+        elif stage == 'ask_name':
+            return self._handle_ask_name(session, speech)
         elif stage == 'budget':
             return self._handle_budget(session, speech)
         elif stage == 'phone_confirm':
@@ -1003,8 +1145,138 @@ Your interpretation:"""
             confidence=confidence
         )
     
+    async def _handle_verify_requirements(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """Handle verification of extracted requirements."""
+        consent, confidence = self._match_consent(speech)
+        
+        if consent is True:
+            # Requirements confirmed - perform search
+            session.collected_data['verified'] = True
+            search_speech = await self._perform_search_and_format(session)
+            
+            return VoiceResponse(
+                message=search_speech,
+                next_stage='search_complete',
+                options=['Yes, call me', 'No thanks'],
+                confidence=confidence
+            )
+        elif consent is False:
+            # User wants to correct - ask what's wrong
+            return VoiceResponse(
+                message="No problem! Please tell me what you're looking for - the city, property type, bedrooms, budget - anything you'd like.",
+                next_stage='location',  # Reset to location for a fresh start
+                confidence=0.8
+            )
+        else:
+            # Unclear - assume confirmed and proceed
+            session.collected_data['verified'] = True
+            search_speech = await self._perform_search_and_format(session)
+            
+            return VoiceResponse(
+                message=f"I'll proceed with that. {search_speech}",
+                next_stage='search_complete',
+                options=['Yes', 'No'],
+                confidence=0.6
+            )
+    
+    async def _handle_search_complete(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """Handle post-search consent for callback - asks for name if not known."""
+        consent, confidence = self._match_consent(speech)
+        
+        # Check if we know the user's real name
+        name = session.collected_data.get('name', '')
+        name_confirmed = session.collected_data.get('name_confirmed', False)
+        has_real_name = name_confirmed and name and name.lower() not in ['customer', 'there', '']
+        
+        if consent is True:
+            session.collected_data['consent'] = True
+            
+            if not has_real_name:
+                # Ask for name naturally before proceeding
+                return VoiceResponse(
+                    message="Wonderful! Before I connect you with our expert, may I know your good name?",
+                    next_stage='ask_name',
+                    confidence=confidence
+                )
+            else:
+                # Already have name - ask for budget
+                return VoiceResponse(
+                    message=f"Great, {name}! What's your budget range for this property?",
+                    next_stage='budget',
+                    confidence=confidence
+                )
+                
+        elif consent is False:
+            session.collected_data['consent'] = False
+            return VoiceResponse(
+                message="No problem at all! Thank you for your time. If you ever need help finding a property, feel free to call RealtyAssistant. Have a wonderful day!",
+                next_stage='thank_you',
+                is_complete=True,
+                collected_data=session.collected_data,
+                confidence=confidence
+            )
+        else:
+            # Unclear - check if they're asking about properties (wanting more info)
+            speech_lower = speech.lower() if speech else ""
+            info_keywords = ['tell', 'more', 'about', 'details', 'price', 'cost', 'where', 'which']
+            
+            if any(kw in speech_lower for kw in info_keywords):
+                # They want more info
+                location = session.collected_data.get('location', 'the area')
+                return VoiceResponse(
+                    message=f"I can share more details! We have several great options in {location}. Would you like our property expert to call you with detailed information and virtual tours?",
+                    next_stage='search_complete',
+                    options=['Yes', 'No'],
+                    confidence=0.6
+                )
+            else:
+                # Assume yes and ask for name
+                session.collected_data['consent'] = True
+                if not has_real_name:
+                    return VoiceResponse(
+                        message="I'll arrange a callback for you. May I have your name please?",
+                        next_stage='ask_name',
+                        confidence=0.5
+                    )
+                else:
+                    return VoiceResponse(
+                        message=f"Alright {name}! What's your budget for this property?",
+                        next_stage='budget',
+                        confidence=0.5
+                    )
+    
+    def _handle_ask_name(self, session: VoiceSession, speech: str) -> VoiceResponse:
+        """Handle name collection in middle of conversation."""
+        if speech and len(speech.strip()) > 1:
+            # Extract name from speech
+            name_text = speech.strip()
+            
+            # Clean common prefixes
+            for prefix in ["my name is", "this is", "i am", "i'm", "call me", "it's", "its"]:
+                if name_text.lower().startswith(prefix):
+                    name_text = name_text[len(prefix):].strip()
+            
+            # Clean trailing pleasantries
+            name_text = name_text.split(',')[0].strip()  # "John, nice to meet you" -> "John"
+            
+            session.collected_data['name'] = name_text.title()
+            session.collected_data['name_confirmed'] = True
+            
+            return VoiceResponse(
+                message=f"Nice to meet you, {name_text.title()}! What's your budget range for the property?",
+                next_stage='budget',
+                confidence=0.9
+            )
+        else:
+            return VoiceResponse(
+                message="I didn't catch your name. Could you please tell me your name?",
+                next_stage='ask_name',
+                confidence=0.5
+            )
+    
     def _handle_consent(self, session: VoiceSession, speech: str) -> VoiceResponse:
-        """Handle consent for sales call."""
+        """Legacy consent handler - redirects to search_complete."""
+        # This is kept for backward compatibility
         consent, confidence = self._match_consent(speech)
         
         if consent is True:
