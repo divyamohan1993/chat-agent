@@ -91,12 +91,15 @@ echo -e "${GREEN}   Dependencies installed${NC}"
 # =============================================================================
 echo -e "${YELLOW}[4/10] Installing Playwright browsers...${NC}"
 
-# Install playwright browsers (needs root for system deps)
-"$VENV_DIR/bin/playwright" install chromium 2>/dev/null || {
-    echo "   Installing Playwright with system dependencies..."
-    "$VENV_DIR/bin/playwright" install-deps chromium 2>/dev/null || true
-    "$VENV_DIR/bin/playwright" install chromium 2>/dev/null || true
-}
+# Install playwright browsers
+# 1. Install system dependencies (requires root)
+echo "   Installing Playwright system dependencies..."
+"$VENV_DIR/bin/playwright" install-deps chromium || echo "   Warning: Failed to install system deps, continuing..."
+
+# 2. Install binaries as the REAL USER (so they go to ~/.cache/ms-playwright)
+echo "   Installing Playwright browsers for user $REAL_USER..."
+sudo -u "$REAL_USER" "$VENV_DIR/bin/playwright" install chromium || echo "   Warning: Failed to install browsers as user"
+
 echo -e "${GREEN}   Playwright ready${NC}"
 
 # =============================================================================
@@ -153,11 +156,16 @@ cd "$PROJECT_DIR"
 
 # 1. Update Code
 echo "Checking for updates..."
-git pull origin main || echo "Git pull failed or not a git repo, continuing..."
+if command -v git &> /dev/null; then
+    git pull origin main || echo "Git pull failed or not a git repo, continuing..."
+else
+    echo "Git not found, skipping update."
+fi
 
 # 2. Update Dependencies
 source "$VENV_DIR/bin/activate"
 pip install -r requirements.txt -q
+playwright install chromium
 
 # 3. Start Application
 exec python main.py serve --host 127.0.0.1 --port ${APP_PORT}
@@ -179,7 +187,7 @@ Type=simple
 User=${REAL_USER}
 Group=${REAL_USER}
 WorkingDirectory=${PROJECT_DIR}
-Environment="PATH=${VENV_DIR}/bin"
+Environment="PATH=${VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Run the wrapper script instead of python directly
 ExecStart=${WRAPPER_SCRIPT}
 Restart=always
